@@ -60,6 +60,29 @@
   #joincode{width:86px;text-transform:uppercase;text-align:center}
   #relayurl{width:230px;letter-spacing:0}
   #netstatus{margin-top:10px;color:#ffd21e;min-height:1.2em}
+  #lobby{margin-top:16px;border-top:1px solid #333;padding-top:14px;max-width:620px;display:none}
+  #lobbyhead{letter-spacing:3px;opacity:.6;font-size:12px;margin-bottom:8px}
+  #lobbyhead b{color:#ffd21e;font-size:18px;letter-spacing:8px}
+  #slots{max-height:168px;overflow-y:auto;border:1px solid #333;background:rgba(8,10,8,.5);
+      padding:6px;margin:10px 0}
+  .slot{display:flex;align-items:center;gap:9px;padding:6px 8px;border-bottom:1px solid #222;
+      font-size:12px;letter-spacing:1px}
+  .slot:last-child{border-bottom:none}
+  .slot.mine{background:rgba(255,210,30,.07)}
+  .slot .nm{flex:1;text-align:left}
+  .slot .you{opacity:.5;font-size:10px}
+  .badge{padding:2px 8px;border:1px solid #55446e;font-size:10px;letter-spacing:2px}
+  .badge.gm{border-color:#c6a6ff;color:#c6a6ff}
+  .badge.diver{border-color:#ffd21e;color:#ffd21e}
+  .badge.spec{border-color:#555;color:#888}
+  .slot .empty{opacity:.35;font-style:italic}
+  #modeRow{margin-bottom:6px}
+  .modebtn.on{background:#ffd21e;color:#111;border-color:#ffd21e}
+  #lobbyhint{font-size:11px;opacity:.65;line-height:1.6em;margin-top:6px}
+  #cfgbox.locked{opacity:.55}
+  #cfgbox.locked input,#cfgbox.locked .preset{pointer-events:none}
+  #cfglocked{display:none;font-size:11px;color:#c6a6ff;letter-spacing:2px;margin-bottom:6px}
+  #cfgbox.locked #cfglocked{display:block}
   #cfgbox{margin-top:18px;border-top:1px solid #333;padding-top:14px;max-width:620px;
       font-size:12px;letter-spacing:1px}
   #cfgbox .mphead{opacity:.6;letter-spacing:3px;margin-bottom:4px}
@@ -205,8 +228,19 @@
         <span style="opacity:.6;font-size:11px">give this to your Helldiver</span></div>
     </div>
 
+    <div id="lobby">
+      <div id="lobbyhead">LOBBY <b id="lobbycode">----</b></div>
+      <div id="modeRow">
+        <button class="preset modebtn" data-mode="gm">GM vs PLAYERS</button>
+        <button class="preset modebtn" data-mode="coop">CO-OP</button>
+      </div>
+      <div id="slots"></div>
+      <div id="lobbyhint"></div>
+    </div>
+
     <div id="cfgbox">
       <div class="mphead">&mdash; MISSION SETTINGS &mdash;</div>
+      <div id="cfglocked">SET BY THE LOBBY HOST</div>
       <div id="cfgsum"></div>
       <div>
         <button class="preset" data-preset="swarm">SWARM</button>
@@ -845,6 +879,7 @@ function cfgRead(){
   CFG.incomeScale=el('cfgiscale').value/100;
   CFG.lives=+el('cfglives').value;
   cfgApplyUI(); cfgSave();
+  if(NET.hosting) lobbyBroadcast();
 }
 var keys = {};
 var mouse = {x:0,y:0,down:false,wx:0,wy:0};
@@ -2572,7 +2607,7 @@ function hud(){
 /* ============================ NETWORK ============================ */
 /* Host-authoritative. The GM's machine runs the whole simulation; the Helldiver
    sends input and receives snapshots. Nothing here runs in solo play. */
-var NET={role:'solo', ws:null, room:'', status:'', note:'', peer:false,
+var NET={role:'solo', ws:null, room:'', status:'', note:'', peer:false, hosting:false,
          acc:0, rate:1/12, inAcc:0, inRate:1/20, actions:[],
          ck:[], ca:[], fx:[], kl:[], sn:[], pf:[], mk:[], ping:0, pingAt:0, pingSeq:0,
          seen:{}, lastSnap:0, snapGap:0.083, mapId:'megacity'};
@@ -2609,8 +2644,8 @@ function netOpen(mode,code,mapId){
   NET.ws=ws;
   NET.mapId=mapId||NET.mapId;
   ws.onopen=function(){
-    if(mode==='host') netSend({t:'host'});
-    else netSend({t:'join', room:String(code||'').toUpperCase()});
+    if(mode==='host') netSend({t:'host', name:myName()});
+    else netSend({t:'join', room:String(code||'').toUpperCase(), name:myName()});
   };
   ws.onerror=function(){ netStatus('could not reach the relay — is server.js running?',true); };
   ws.onclose=function(){
@@ -2627,25 +2662,51 @@ function netOpen(mode,code,mapId){
 function netHandle(m,mode){
   switch(m.t){
     case 'hosted':
-      NET.room=m.room;
-      netStatus('room '+m.room+' — waiting for your Helldiver to join');
+      NET.room=m.room; NET.hosting=true;
+      LOBBY.myId=0;
+      LOBBY.slots=[{id:0,name:myName(),role:lobbyDefaultRole(0)}];
+      netStatus('room '+m.room+' — share the code');
       el('roomcode').textContent=m.room;
       el('roombox').style.display='block';
+      el('lobby').style.display='block';
+      lobbyRender();
       break;
     case 'joined':
-      netStatus('joined '+m.room+' — waiting for the Game Master to start the mission');
+      NET.room=m.room; LOBBY.myId=m.id;
+      netStatus('joined '+m.room+' — waiting for the host to start');
+      el('lobby').style.display='block';
+      lobbyRender();
       break;
     case 'peer':
       NET.peer=true;
-      netStatus('HELLDIVER CONNECTED — choose a map, then start the mission');
-      el('startmission').style.display='inline-block';
+      LOBBY.slots.push({id:m.id, name:m.name||('DIVER '+m.id),
+                        role:LOBBY.mode==='coop'?'diver':'diver'});
+      netStatus((m.name||'A player')+' joined — set the roster, then start');
+      lobbyBroadcast();
+      break;
+    case 'lobby':
+      LOBBY.mode=m.mode; LOBBY.slots=m.slots||[];
+      if(m.cfg) for(var lk in CFG) if(typeof m.cfg[lk]==='number') CFG[lk]=m.cfg[lk];
+      cfgApplyUI();
+      lobbyRender();
+      break;
+    case 'want':
+      lobbyHostWant(m.from,m.role);
       break;
     case 'error':
       netStatus(m.why||'refused',true);
       break;
     case 'peerleft':
-      netToMenu('PARTNER LEFT', NET.role==='host'?'Your Helldiver disconnected.'
-                                                 :'The Game Master closed the game.');
+      if(m.host||!NET.hosting){
+        netToMenu('LOBBY CLOSED','The host ended the session.');
+        break;
+      }
+      for(var pl=LOBBY.slots.length-1;pl>=0;pl--)
+        if(LOBBY.slots[pl].id===m.id) LOBBY.slots.splice(pl,1);
+      NET.peer=LOBBY.slots.length>1;
+      netStatus('a player left the lobby');
+      lobbyBroadcast();
+      if(running&&!gameOver) say('A PLAYER DISCONNECTED',3);
       break;
     case 'city':   clientCity(m); break;
     case 'snap':   clientSnap(m); break;
@@ -2665,6 +2726,124 @@ function netToMenu(title,body){
   el('overlay').style.display='flex';
   el('roombox').style.display='none';
   if(wasRole!=='solo') netStatus('offline');
+}
+
+/* ---------------------------------------------------------------- LOBBY ---- */
+/* The host owns this outright: mode, settings and every slot's role. Clients ask
+   for a role and render whatever the host last broadcast. */
+var LOBBY={mode:'gm', slots:[], myId:-1};
+var MYNAME='';
+function myName(){
+  if(MYNAME) return MYNAME;
+  try{ MYNAME=localStorage.getItem('hd_name')||''; }catch(e){}
+  if(!MYNAME) MYNAME='DIVER '+(1+Math.floor(Math.random()*89));
+  return MYNAME;
+}
+function lobbySlot(id){
+  for(var i=0;i<LOBBY.slots.length;i++) if(LOBBY.slots[i].id===id) return LOBBY.slots[i];
+  return null;
+}
+function lobbyCount(role){
+  var n=0;
+  for(var i=0;i<LOBBY.slots.length;i++) if(LOBBY.slots[i].role===role) n++;
+  return n;
+}
+/* In GM mode the lobby creator runs the horde: the simulation lives on their
+   machine, and an off-host GM would need an uncultured view of the whole map. */
+function lobbyDefaultRole(id){ return (LOBBY.mode==='gm'&&id===0)?'gm':'diver'; }
+function lobbyBroadcast(){
+  if(NET.role!=='host'&&!NET.hosting) return;
+  netSend({t:'lobby', mode:LOBBY.mode, slots:LOBBY.slots, cfg:CFG});
+  lobbyRender();
+}
+function lobbySetMode(m){
+  if(!NET.hosting) return;
+  LOBBY.mode=m;
+  for(var i=0;i<LOBBY.slots.length;i++){
+    var S=LOBBY.slots[i];
+    if(m==='coop'&&S.role==='gm') S.role='diver';
+    if(m==='gm'&&i===0&&S.role==='diver'&&!lobbyCount('gm')) S.role='gm';
+  }
+  lobbyBroadcast();
+}
+function lobbyWant(role){
+  if(NET.hosting){
+    var S=lobbySlot(0);
+    if(!S) return;
+    if(role==='gm'&&LOBBY.mode!=='gm') return;
+    if(role==='gm') for(var i=0;i<LOBBY.slots.length;i++)
+      if(LOBBY.slots[i].role==='gm') LOBBY.slots[i].role='diver';
+    S.role=role;
+    lobbyBroadcast();
+  } else netSend({t:'want', role:role});
+}
+function lobbyHostWant(from,role){
+  if(!NET.hosting) return;
+  var S=lobbySlot(from);
+  if(!S) return;
+  if(role==='gm'){
+    if(LOBBY.mode!=='gm') return;
+    for(var i=0;i<LOBBY.slots.length;i++)
+      if(LOBBY.slots[i].role==='gm') LOBBY.slots[i].role='diver';
+  }
+  S.role=role;
+  lobbyBroadcast();
+}
+function lobbyRender(){
+  var box=el('slots'); if(!box) return;
+  el('lobbycode').textContent=NET.room||'----';
+  var html='';
+  for(var i=0;i<LOBBY.slots.length;i++){
+    var S=LOBBY.slots[i], mine=S.id===LOBBY.myId;
+    html+='<div class="slot'+(mine?' mine':'')+'">'+
+      '<span class="badge '+S.role+'">'+
+        (S.role==='gm'?'GAME MASTER':S.role==='spec'?'SPECTATOR':'HELLDIVER')+'</span>'+
+      '<span class="nm">'+S.name+(S.id===0?' <span class="you">(host)</span>':'')+
+        (mine?' <span class="you">(you)</span>':'')+'</span>';
+    if(mine){
+      if(LOBBY.mode==='gm'&&S.role!=='gm')
+        html+='<button class="preset" data-want="gm">TAKE GM</button>';
+      if(S.role!=='diver') html+='<button class="preset" data-want="diver">PLAY</button>';
+      if(S.role!=='spec') html+='<button class="preset" data-want="spec">WATCH</button>';
+    }
+    html+='</div>';
+  }
+  for(var e2=LOBBY.slots.length;e2<4;e2++)
+    html+='<div class="slot"><span class="badge spec">OPEN</span>'+
+          '<span class="nm empty">waiting for a player…</span></div>';
+  box.innerHTML=html;
+
+  var btns=box.querySelectorAll('[data-want]');
+  for(var b=0;b<btns.length;b++)
+    btns[b].onclick=(function(r){ return function(){ lobbyWant(r); }; })(btns[b].getAttribute('data-want'));
+
+  var mb=document.querySelectorAll('[data-mode]');
+  for(var m=0;m<mb.length;m++){
+    var on=mb[m].getAttribute('data-mode')===LOBBY.mode;
+    mb[m].className='preset modebtn'+(on?' on':'');
+    mb[m].style.display=NET.hosting?'inline-block':'none';
+  }
+  el('cfgbox').className=NET.hosting?'':'locked';
+
+  var divers=lobbyCount('diver'), gms=lobbyCount('gm');
+  var ok=LOBBY.mode==='gm' ? (gms===1&&divers>=1) : (divers>=1);
+  var hint;
+  if(LOBBY.mode==='gm')
+    hint=gms!==1 ? 'GM mode needs exactly one Game Master.'
+       : divers<1 ? 'GM mode needs at least one Helldiver.'
+       : 'Ready: '+divers+' Helldiver'+(divers>1?'s':'')+' against the Game Master.';
+  else
+    hint=divers<1 ? 'Co-op needs at least one Helldiver.'
+       : 'Ready: '+divers+' Helldiver'+(divers>1?'s':'')+' against the horde.';
+  if(divers>1) hint+=' — note: only the first Helldiver is playable until the '+
+                     'multi-diver update lands; the rest spectate.';
+  el('lobbyhint').textContent=hint;
+  var sm=el('startmission');
+  if(sm){
+    sm.style.display=NET.hosting?'inline-block':'none';
+    sm.disabled=!ok;
+    sm.style.opacity=ok?1:0.45;
+  }
 }
 
 /* ---------------------------------------------------------------- HOST side */
@@ -3304,7 +3483,10 @@ function die(who){
 var lastMap='plains';
 function netQuit(){
   if(NET.ws){ try{ NET.ws.close(); }catch(e){} NET.ws=null; }
-  NET.role='solo'; NET.peer=false; NET.room=''; NET.hostPaused=false;
+  NET.role='solo'; NET.peer=false; NET.room=''; NET.hostPaused=false; NET.hosting=false;
+  LOBBY.slots=[]; LOBBY.myId=-1;
+  el('lobby').style.display='none';
+  el('cfgbox').className='';
   el('pausedbanner').style.display='none';
   document.body.classList.remove('gm');
   el('roombox').style.display='none';
@@ -3330,7 +3512,11 @@ el('hostbtn').onclick=function(){
   audioInit();
   netOpen('host',null,el('gmmap').value);
 };
-el('startmission').onclick=function(){ if(NET.peer) startGM(); };
+el('startmission').onclick=function(){ if(NET.hosting) startGM(); };
+var modeBtns=document.querySelectorAll('[data-mode]');
+for(var mb2=0;mb2<modeBtns.length;mb2++)
+  modeBtns[mb2].onclick=(function(mm){ return function(){ lobbySetMode(mm); }; })(
+    modeBtns[mb2].getAttribute('data-mode'));
 el('joinbtn').onclick=function(){
   audioInit();
   var c=el('joincode').value.trim().toUpperCase();
@@ -3345,7 +3531,7 @@ el('relayurl').addEventListener('keydown',function(e){ e.stopPropagation(); });
 el('newround').onclick=function(){ if(NET.role==='host'&&NET.peer) startGM(); };
 var cfgIn=['cfgramp','cfgtough','cfgincome','cfgiscale','cfglives'];
 for(var ci2=0;ci2<cfgIn.length;ci2++) el(cfgIn[ci2]).oninput=cfgRead;
-var presetBtns=document.querySelectorAll('.preset');
+var presetBtns=document.querySelectorAll('[data-preset]');
 for(var pb=0;pb<presetBtns.length;pb++){
   presetBtns[pb].onclick=(function(name){
     return function(){

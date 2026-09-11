@@ -38,11 +38,12 @@ const server = http.createServer((req, res) => {
 /* ------------------------------------------------------- websocket plumbing */
 let nextId = 1;
 const sockets = new Map();          // id -> conn
-const rooms = new Map();            // code -> {host, client}
+const rooms = new Map();            // code -> {host, clients:[], nextId}
+const MAX_CLIENTS = 3;              // plus the host = 4 people in a room
 
 function makeConn(sock) {
   const conn = {id: nextId++, sock, buf: Buffer.alloc(0), room: null, role: null,
-                alive: true, frag: null, fragOp: 0};
+                pid: -1, name: '', alive: true, frag: null, fragOp: 0};
   sockets.set(conn.id, conn);
   return conn;
 }
@@ -70,16 +71,21 @@ function wsClose(conn) {
   sockets.delete(conn.id);
   const room = conn.room && rooms.get(conn.room);
   if (room) {
-    const peer = room.host === conn ? room.client : room.host;
-    if (peer) { wsSend(peer, JSON.stringify({t: 'peerleft'})); }
     if (room.host === conn) {
       /* host left: the room dies with it */
-      if (room.client) room.client.room = null;
+      for (const c of room.clients) {
+        wsSend(c, JSON.stringify({t: 'peerleft', id: 0, host: true}));
+        c.room = null;
+      }
       rooms.delete(conn.room);
       log(`room ${conn.room} closed (host left)`);
-    } else if (room.client === conn) {
-      room.client = null;
-      log(`room ${conn.room}: client left`);
+    } else {
+      const i = room.clients.indexOf(conn);
+      if (i >= 0) room.clients.splice(i, 1);
+      const gone = JSON.stringify({t: 'peerleft', id: conn.pid});
+      wsSend(room.host, gone);
+      for (const c of room.clients) wsSend(c, gone);
+      log(`room ${conn.room}: ${conn.name || 'player'} (${conn.pid}) left`);
     }
   }
 }
@@ -106,30 +112,50 @@ function onMessage(conn, str) {
   if (msg && msg.t === 'host') {
     if (conn.room) return;
     const code = roomCode();
-    rooms.set(code, {host: conn, client: null});
-    conn.room = code; conn.role = 'host';
-    wsSend(conn, JSON.stringify({t: 'hosted', room: code}));
-    log(`room ${code} opened`);
+    rooms.set(code, {host: conn, clients: [], nextId: 1});
+    conn.room = code; conn.role = 'host'; conn.pid = 0;
+    conn.name = String(msg.name || 'HOST').slice(0, 14);
+    wsSend(conn, JSON.stringify({t: 'hosted', room: code, id: 0}));
+    log(`room ${code} opened by ${conn.name}`);
     return;
   }
   if (msg && msg.t === 'join') {
     const code = String(msg.room || '').toUpperCase().trim();
     const room = rooms.get(code);
     if (!room) { wsSend(conn, JSON.stringify({t: 'error', why: 'No game with that code.'})); return; }
-    if (room.client) { wsSend(conn, JSON.stringify({t: 'error', why: 'That game is full.'})); return; }
-    room.client = conn; conn.room = code; conn.role = 'client';
-    wsSend(conn, JSON.stringify({t: 'joined', room: code}));
-    wsSend(room.host, JSON.stringify({t: 'peer'}));
-    log(`room ${code}: client joined`);
+    if (room.clients.length >= MAX_CLIENTS) {
+      wsSend(conn, JSON.stringify({t: 'error', why: 'That game is full.'})); return;
+    }
+    conn.pid = room.nextId++;
+    conn.name = String(msg.name || ('DIVER ' + conn.pid)).slice(0, 14);
+    room.clients.push(conn);
+    conn.room = code; conn.role = 'client';
+    wsSend(conn, JSON.stringify({t: 'joined', room: code, id: conn.pid}));
+    wsSend(room.host, JSON.stringify({t: 'peer', id: conn.pid, name: conn.name}));
+    log(`room ${code}: ${conn.name} joined as ${conn.pid} (${room.clients.length}/${MAX_CLIENTS})`);
     return;
   }
   if (msg && msg.t === 'ping') { wsSend(conn, JSON.stringify({t: 'pong', s: msg.s})); return; }
 
-  /* forward to the other side of the room */
   const room = conn.room && rooms.get(conn.room);
   if (!room) return;
-  const peer = room.host === conn ? room.client : room.host;
-  if (peer) wsSend(peer, str);
+
+  if (room.host === conn) {
+    /* host -> one named client, or everybody */
+    if (msg && typeof msg.to === 'number') {
+      for (const c of room.clients) if (c.pid === msg.to) { wsSend(c, str); return; }
+      return;
+    }
+    for (const c of room.clients) wsSend(c, str);
+    return;
+  }
+  /* client -> host, tagged so the host knows who it came from */
+  if (msg && typeof msg === 'object') {
+    msg.from = conn.pid;
+    wsSend(room.host, JSON.stringify(msg));
+  } else {
+    wsSend(room.host, str);
+  }
 }
 
 function pump(conn) {
