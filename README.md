@@ -154,6 +154,12 @@ sends input roughly 20 times a second and receives world snapshots 12 times a se
 interpolating between them. A snapshot carries every Helldiver, so each client draws
 its squadmates with name tags and health bars.
 
+Everything the host sends carries an id, so a body is *carried* from where it was
+drawn to where the host says it is, arriving exactly as the next snapshot lands. The
+earlier code rebuilt those lists twelve times a second, which cannot be interpolated
+at all -- it can only blink. Tracers are the exception: a bullet flies straight at a
+known speed, so once seen it is simulated locally and stays perfectly smooth.
+
 Your own Helldiver is **predicted** locally — your walking and your muzzle flash happen
 on your keypress, and the host's word is eased in rather than snapped, so a round trip
 never shows up as lag on your own body. Squadmates are pure interpolation.

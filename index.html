@@ -14,8 +14,11 @@
   #topbar .big{font-size:26px;color:#ffd21e;font-weight:bold;}
   #botleft{left:14px;bottom:12px;font-size:13px;}
   #botright{right:14px;bottom:12px;font-size:11px;text-align:right;opacity:.8;line-height:1.6em;}
-  .bar{width:215px;height:13px;border:2px solid #000;background:#2a2a2a;margin:3px 0 6px;}
-  .bar > i{display:block;height:100%;}
+  .bar{position:relative;width:215px;height:13px;border:2px solid #000;background:#2a2a2a;
+    margin:3px 0 6px;overflow:hidden}
+  .bar > i{position:absolute;left:0;top:0;height:100%;}
+  #ammobar{transition:width .09s linear}
+  #hpghost{background:#5e1a1f}
   #mags{display:flex;gap:3px;margin:2px 0 7px}
   #mags s{display:block;width:11px;height:17px;background:#ffd21e;border:1px solid #000;
     text-decoration:none}
@@ -135,7 +138,8 @@
   #gmstats{opacity:.7;font-size:10.5px;letter-spacing:2px;margin-top:6px}
   #gmpanel h4{margin:0 0 6px;font-size:13px;letter-spacing:3px;color:#c6a6ff}
   #gmcredits{width:210px;height:14px;border:2px solid #000;background:#241c30;margin:4px 0 8px}
-  #gmcredits i{display:block;height:100%;background:#a06bff}
+  #gmcredits i{display:block;height:100%;background:#a06bff;transition:width .12s linear}
+  #gmsquad .gmdbar i{transition:width .12s linear}
   .gmunit{padding:4px 7px;border:1px solid #55446e;margin-right:5px;display:inline-block;
       margin-bottom:4px}
   .gmunit.on{border-color:#c6a6ff;background:#2c2140;color:#e6d6ff}
@@ -180,7 +184,8 @@
 
   <div class="hud" id="botleft">
     <div>HEALTH</div>
-    <div class="bar"><i id="hpbar" style="width:100%;background:#4fb477"></i></div>
+    <div class="bar"><i id="hpghost" style="width:100%"></i>
+      <i id="hpbar" style="width:100%;background:#4fb477"></i></div>
     <div id="wname">AR-23 LIBERATOR</div>
     <div class="bar" style="width:170px"><i id="ammobar" style="width:100%;background:#ffd21e"></i></div>
     <div id="mags"></div>
@@ -341,6 +346,15 @@ function resize(){ W = cv.width = innerWidth; H = cv.height = innerHeight; }
 addEventListener('resize', resize); resize();
 
 function rand(a,b){ return a+Math.random()*(b-a); }
+/* Exponential smoothing that lands in the same place whatever the frame rate.
+   `Math.min(1,dt*k)` drifts: on a 144Hz screen it eases three times as far per
+   second as on a 48Hz one, so the same camera feels different on two machines. */
+function ease(k,dt){ return 1-Math.exp(-k*dt); }
+/* shortest way round the circle, so a turn through north does not spin the long way */
+function angLerp(a,b,t){
+  var d=Math.atan2(Math.sin(b-a),Math.cos(b-a));
+  return a+d*t;
+}
 function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
 function clamp(v,a,b){ return v<a?a:v>b?b:v; }
 var TAU = Math.PI*2;
@@ -1010,8 +1024,8 @@ var STRATS = [
   {id:'liberty', name:"LIBERTY'S CALL",  code:['U','U','D','D','L','R','L','R'],
    cd:150, callIn:4.0, pod:true, hidden:true, color:'#ffffff'}
 ];
-var toast={t:0,txt:''};
-function say(txt,secs){ toast.txt=txt; toast.t=secs||3; }
+var toast={t:0,max:3,txt:''};
+function say(txt,secs){ toast.txt=txt; toast.t=toast.max=secs||3; }
 /* Say something to one particular Helldiver, wherever they are sitting. */
 function sayTo(P,txt,secs){
   if(!P) return;
@@ -1158,7 +1172,8 @@ function reset(){
   time=0;kills=0;spawnAcc=0;shake=0;hordeLv=1;gameOver=false;wipeT=0;
   typed=[];codeActive=false;toast.t=0;
   cam.x=player.x; cam.y=player.y;
-  enemyId=0; NET.seen={};
+  enemyId=0; netId=0;
+  NET.seen={}; NET.mSt={}; NET.mPd={}; NET.mBl={}; NET.mBu={}; NET.mNd={};
   for(var ci3=0;ci3<players.length;ci3++) capeInit(players[ci3]);
   /* in a GM match every last enemy is placed by hand, so no opening horde */
   if(!GMMATCH&&NET.role!=='client') for(var j=0;j<45;j++) spawnEnemy('voteless',true);
@@ -1222,6 +1237,10 @@ function A_(){ return player.arsenal[player.wep]; }
 
 /* ============================ ENEMIES ============================ */
 var enemyId=0;
+/* Every networked body carries one of these so the far end can recognise it next
+   snapshot instead of throwing it away and making a new one. */
+var netId=0;
+function nid(){ return ++netId; }
 function spawnEnemy(type,anywhere,atx,aty){
   var x,y;
   if(atx!==undefined){ x=atx; y=aty; }
@@ -1279,7 +1298,8 @@ function fire(){
     camKick.y-=Math.sin(ang)*w.punch*1.5;
   }
   var mx=player.x+Math.cos(ang)*20, my=player.y+Math.sin(ang)*20;
-  bullets.push({x:mx,y:my,px:mx,py:my,vx:Math.cos(ang)*w.speed,vy:Math.sin(ang)*w.speed,
+  bullets.push({nid:nid(),x:mx,y:my,px:mx,py:my,
+    vx:Math.cos(ang)*w.speed,vy:Math.sin(ang)*w.speed,
     life:w.life,dmg:w.dmg,color:w.color,size:w.size});
   if(player===me) shake=Math.max(shake,w.recoil);
   SFX.shot(w);
@@ -1445,7 +1465,7 @@ function throwNade(){
   var NI=player.inp;
   var a=Math.atan2(NI.ay-player.y,NI.ax-player.x);
   var d=Math.min(430,Math.hypot(NI.ax-player.x,NI.ay-player.y));
-  nades.push({sx:player.x,sy:player.y,x:player.x,y:player.y,
+  nades.push({nid:nid(),sx:player.x,sy:player.y,x:player.x,y:player.y,
     tx:player.x+Math.cos(a)*d,ty:player.y+Math.sin(a)*d,t:0,dur:0.5,z:0,fuse:1.5,spin:0});
   SFX.throwb();
 }
@@ -1543,7 +1563,7 @@ function throwStratagem(tx,ty){
   /* the ball is a physical object — it flies, bounces and rolls, and whatever it
      ends up next to is what gets the stratagem */
   var flight=clamp(d/560,0.45,1.05);
-  balls.push({x:player.x,y:player.y,
+  balls.push({nid:nid(),x:player.x,y:player.y,
     vx:Math.cos(a)*d/flight, vy:Math.sin(a)*d/flight,
     z:16, vz:300*flight, spin:0, rest:0, beep:0, call:0,
     landed:false, strat:armed});
@@ -1632,7 +1652,7 @@ function reinforceAt(x,y,who){
 
 /* ---- hellpods ---- */
 function dropPod(x,y,payload){
-  pods.push({x:x,y:y,z:1500,vz:0,payload:payload,t:0,
+  pods.push({nid:nid(),x:x,y:y,z:1500,vz:0,payload:payload,t:0,
     col:payload.kind==='player'?'#ffd21e':
         payload.kind==='sentry'?'#7fd4ff':
         payload.kind==='bulletstorm'?'#c6ff6b':
@@ -1696,7 +1716,8 @@ function podLand(p){
       P.stimT=0; P.stimHeal=0;
     }
   }else if(k==='sentry'){
-    sentries.push({x:x,y:y,hp:220,max:220,ang:0,cool:0,ammo:320,maxAmmo:320,warm:1.5,dying:0});
+    sentries.push({nid:nid(),x:x,y:y,hp:220,max:220,ang:0,cool:0,ammo:320,maxAmmo:320,
+                   warm:1.5,dying:0});
     SFX.deploy();
   }else if(k==='bulletstorm'){
     pickups.push({kind:'bulletstorm',x:x,y:y,bob:rand(0,6)});
@@ -1782,8 +1803,8 @@ function updateDiver(P,dt){
   var m=Math.hypot(ix,iy)||1; ix/=m; iy/=m;
   var sprinting=!pod&&IN.sprint&&(ix||iy);
   var spd=(sprinting?360:230)*(P.stimT>0?1.25:1);
-  P.vx+=(ix*spd-P.vx)*Math.min(1,dt*12);
-  P.vy+=(iy*spd-P.vy)*Math.min(1,dt*12);
+  P.vx+=(ix*spd-P.vx)*ease(12,dt);
+  P.vy+=(iy*spd-P.vy)*ease(12,dt);
   P.x=clamp(P.x+P.vx*dt,-WORLD,WORLD);
   P.y=clamp(P.y+P.vy*dt,-WORLD,WORLD);
   if(!pod) resolveCircle(P,P.r);
@@ -1811,8 +1832,8 @@ function updateDiver(P,dt){
 
   P.cool-=dt;
   if(P.guard>0) P.guard-=dt;
-  P.kick-=P.kick*Math.min(1,dt*9);        /* muzzle settles back on target */
-  P.punch-=P.punch*Math.min(1,dt*14);
+  P.kick-=P.kick*ease(9,dt);        /* muzzle settles back on target */
+  P.punch-=P.punch*ease(14,dt);
   for(var st=0;st<P.stt.length;st++)
     if(P.stt[st]>0) P.stt[st]=Math.max(0,P.stt[st]-dt);
 
@@ -1869,8 +1890,8 @@ function update(dt){
   if(amGM()){ camTx=GM.cx; camTy=GM.cy; }
   cam.x+=(camTx-cam.x)*Math.min(1,dt*(eyePod?3:6));
   cam.y+=(camTy-cam.y)*Math.min(1,dt*(eyePod?3:6));
-  camKick.x-=camKick.x*Math.min(1,dt*11);
-  camKick.y-=camKick.y*Math.min(1,dt*11);
+  camKick.x-=camKick.x*ease(11,dt);
+  camKick.y-=camKick.y*ease(11,dt);
 
   squadCheck(dt);
 
@@ -2140,7 +2161,7 @@ function update(dt){
         SFX.sentry();
         var sa=st.ang+rand(-0.05,0.05);
         var smx=st.x+Math.cos(sa)*26, smy=st.y+Math.sin(sa)*26;
-        bullets.push({x:smx,y:smy,px:smx,py:smy,vx:Math.cos(sa)*1500,vy:Math.sin(sa)*1500,
+        bullets.push({nid:nid(),x:smx,y:smy,px:smx,py:smy,vx:Math.cos(sa)*1500,vy:Math.sin(sa)*1500,
           life:0.75,dmg:12,color:'#bfe9ff',size:3});
       }
     }
@@ -2369,6 +2390,19 @@ function drawBuilding(b,vx0,vy0,vx1,vy1){
     ctx.globalAlpha=1;
   }
 }
+/* Health slides to its new value and leaves a slower red ghost behind it, so a hit
+   reads as an amount taken rather than a bar that was simply a different length the
+   next time you looked at it. */
+function healthEase(){
+  for(var i=0;i<players.length;i++){
+    var P=players[i], h=Math.max(0,P.hp);
+    if(P.hpShow===undefined){ P.hpShow=h; P.hpGhost=h; }
+    P.hpShow+=(h-P.hpShow)*ease(15,FDT);
+    if(P.hpGhost<P.hpShow) P.hpGhost=P.hpShow;
+    else P.hpGhost+=(P.hpShow-P.hpGhost)*ease(2.6,FDT);
+    if(Math.abs(P.hpShow-h)<0.35) P.hpShow=h;
+  }
+}
 function drawDiverTag(P){
   var mine=P===me;
   ctx.font=(mine?'10px':'bold 10px')+' Consolas'; ctx.textAlign='center';
@@ -2378,9 +2412,11 @@ function drawDiverTag(P){
   ctx.fillStyle=mine?'#ffd21e':'#b8e6c0';
   ctx.fillText(P.name,P.x,P.y-36);
   ctx.globalAlpha=1;
-  var h=clamp(P.hp/P.maxhp,0,1);
+  var h=clamp((P.hpShow===undefined?P.hp:P.hpShow)/P.maxhp,0,1);
+  var g=clamp((P.hpGhost===undefined?P.hp:P.hpGhost)/P.maxhp,0,1);
   ctx.fillStyle='rgba(0,0,0,.65)'; ctx.fillRect(P.x-17,P.y-31,34,4);
-  ctx.fillStyle=P.stimHeal>0?'#78ffa0':h>0.5?'#4fb477':h>0.25?'#ffd21e':'#c1121f';
+  if(g>h){ ctx.fillStyle='#5e1a1f'; ctx.fillRect(P.x-16.5,P.y-30.5,33*g,3); }
+  ctx.fillStyle=P.stimT>0?'#78ffa0':h>0.5?'#4fb477':h>0.25?'#ffd21e':'#c1121f';
   ctx.fillRect(P.x-16.5,P.y-30.5,33*h,3);
 }
 function drawCape(){
@@ -2757,10 +2793,14 @@ function draw(){
                  W/2,H*0.38+24);
   }
   if(toast.t>0){
-    ctx.globalAlpha=Math.min(1,toast.t);
+    /* rises into place over the first fifth of a second, fades out over the last */
+    var inT=clamp((toast.max-toast.t)/0.18,0,1);
+    var rise=(1-inT)*(1-inT)*14;
+    var ty2=H*0.22+rise;
+    ctx.globalAlpha=Math.min(1,toast.t)*inT;
     ctx.font='bold 26px Consolas'; ctx.textAlign='center';
-    ctx.fillStyle='#000'; ctx.fillText(toast.txt,W/2+2,H*0.22+2);
-    ctx.fillStyle='#ffd21e'; ctx.fillText(toast.txt,W/2,H*0.22);
+    ctx.fillStyle='#000'; ctx.fillText(toast.txt,W/2+2,ty2+2);
+    ctx.fillStyle='#ffd21e'; ctx.fillText(toast.txt,W/2,ty2);
     ctx.globalAlpha=1;
   }
   var v=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.35,W/2,H/2,Math.max(W,H)*0.72);
@@ -2897,10 +2937,12 @@ function hud(){
     (NET.role==='client'?'  ·  '+NET.ping+'ms':'')+
     (muted?'  ·  [MUTED]':'');
 
-  var hp=clamp(player.hp/player.maxhp,0,1);
+  var hp=clamp((player.hpShow===undefined?player.hp:player.hpShow)/player.maxhp,0,1);
   var hb=el('hpbar');
   hb.style.width=(hp*100)+'%';
   hb.style.background=player.stimHeal>0?'#78ffa0':(hp>0.5?'#4fb477':hp>0.25?'#ffd21e':'#c1121f');
+  var hg=clamp((player.hpGhost===undefined?player.hp:player.hpGhost)/player.maxhp,0,1);
+  el('hpghost').style.width=(Math.max(hg,hp)*100)+'%';
 
   var w=W_(), a=A_();
   el('wname').textContent=w.name+'   '+a.ammo+' / '+w.mag+
@@ -2930,6 +2972,10 @@ function hud(){
     chip.style.display='';
     var left=me?me.stt[s]:0, ready=left<=0, isArmed=!!(me&&me.armed===t);
     chip.className='chip '+(isArmed?'ready':ready?'':'cool');
+    /* a cooldown you can watch fill beats a number stepping down a second at a time */
+    var fill=ready?100:100*(1-left/t.cd);
+    chip.style.backgroundImage=ready?'none'
+      :'linear-gradient(to right,#242a1c '+fill+'%,#14160f '+fill+'%)';
     var codeStr='';
     for(var g=0;g<t.code.length;g++) codeStr+=GLYPH[t.code[g]];
     chip.innerHTML='<b>'+codeStr+'</b>'+t.name+'<br>'+
@@ -2951,7 +2997,8 @@ function hud(){
 var NET={role:'solo', ws:null, room:'', status:'', note:'', peer:false, hosting:false,
          acc:0, rate:1/12, inAcc:0, inRate:1/20, actions:[],
          ck:[], ca:[], fx:[], kl:[], sn:[], pf:[], mk:[], sp:[], ping:0, pingAt:0, pingSeq:0,
-         seen:{}, lastSnap:0, snapGap:0.083, mapId:'megacity', roster:null};
+         seen:{}, mSt:{}, mPd:{}, mBl:{}, mBu:{}, mNd:{},
+         lastSnap:0, snapGap:0.083, mapId:'megacity', roster:null};
 var GM={cx:0, cy:0, credits:26, max:160, rate:2.6, sel:0, cool:0, spent:0, sent:0};
 var GM_UNITS=[{id:'voteless', name:'VOTELESS', cost:1},
               {id:'flesh',    name:'FLESHMOB', cost:16}];
@@ -3330,7 +3377,7 @@ function netSnapshot(){
   var st=[];
   for(var j=0;j<sentries.length;j++){
     var S=sentries[j];
-    st.push(R(S.x),R(S.y),R(S.ang*57.2958),R(100*S.hp/S.max),R(100*S.ammo/S.maxAmmo),
+    st.push(S.nid,R(S.x),R(S.y),R(S.ang*57.2958),R(100*S.hp/S.max),R(100*S.ammo/S.maxAmmo),
             S.dying>0?1:0);
   }
   var pk=[];
@@ -3338,22 +3385,23 @@ function netSnapshot(){
     pk.push(pickups[k2].kind==='supply'?0:1,R(pickups[k2].x),R(pickups[k2].y));
   var pd=[];
   for(var k3=0;k3<pods.length;k3++)
-    pd.push(R(pods[k3].x),R(pods[k3].y),R(pods[k3].z),pods[k3].col,
+    pd.push(pods[k3].nid,R(pods[k3].x),R(pods[k3].y),R(pods[k3].z),pods[k3].col,
             (pods[k3].payload&&typeof pods[k3].payload.pid==='number')?pods[k3].payload.pid:-1);
   var bl=[];
   for(var k4=0;k4<balls.length;k4++){
     var B=balls[k4], si=0;
     for(var q2=0;q2<STRATS.length;q2++) if(STRATS[q2]===B.strat) si=q2;
-    bl.push(R(B.x),R(B.y),R(B.z),si,B.landed?1:0,Math.round(B.call*10));
+    bl.push(B.nid,R(B.x),R(B.y),R(B.z),si,B.landed?1:0,Math.round(B.call*10));
   }
   var bu=[];
   for(var k5=0;k5<bullets.length;k5++){
     var U=bullets[k5], ci=COLIDX.indexOf(U.color);
-    bu.push(R(U.x),R(U.y),R(U.vx),R(U.vy),Math.round(U.life*100),ci<0?0:ci);
+    bu.push(U.nid,R(U.x),R(U.y),R(U.vx),R(U.vy),Math.round(U.life*100),ci<0?0:ci);
   }
   var nd=[];
   for(var k6=0;k6<nades.length;k6++)
-    nd.push(R(nades[k6].x),R(nades[k6].y),R(nades[k6].z),Math.round(nades[k6].fuse*10));
+    nd.push(nades[k6].nid,R(nades[k6].x),R(nades[k6].y),R(nades[k6].z),
+            Math.round(nades[k6].fuse*10));
   var ps=[];
   for(var k7=0;k7<players.length;k7++) ps.push(snapDiver(players[k7]));
   var snap={t:'snap', tm:Math.round(time*10), lv:hordeLv, ki:kills, rb:Math.round(nextRebuild),
@@ -3386,6 +3434,28 @@ function snapDiver(P){
      bo:bs.owned?1:0, ba:bs.ammo, ml:R(P.melee*100), sr:P.sprint?1:0, cd:cd};
   if(P.armed) o.ar=P.armed.id;
   return o;
+}
+/* Entity interpolation. The host speaks twelve times a second; these carry a body
+   from where it was drawn to where the host says it is, arriving exactly as the next
+   word lands. An exponential chase never arrives at all -- it trails by a fraction of
+   the gap forever, which is what makes networked movement look syrupy. */
+function lerpTo(o,x,y,z){
+  o.ix=o.x; o.iy=o.y; o.iz=o.z||0;
+  o.tx=x; o.ty=y; o.tz=(z===undefined?o.z||0:z);
+  o.lt=0;
+}
+function lerpAt(o,x,y,z){
+  o.x=o.ix=o.tx=x; o.y=o.iy=o.ty=y;
+  o.z=o.iz=o.tz=(z===undefined?0:z);
+  o.lt=0;
+}
+function lerpStep(o,dt){
+  if(o.lt===undefined) return;
+  o.lt+=dt;
+  var a=NET.snapGap>0.001?clamp(o.lt/NET.snapGap,0,1):1;
+  o.x=o.ix+(o.tx-o.ix)*a;
+  o.y=o.iy+(o.ty-o.iy)*a;
+  if(o.tz!==undefined) o.z=o.iz+(o.tz-o.iz)*a;
 }
 function netSound(name){ if(NET.role==='host'&&NET.sn.length<12) NET.sn.push(name); }
 
@@ -3495,6 +3565,20 @@ function clientCity(m){
   document.body.classList.remove('gm');
   uiApply();
 }
+/* Match a flat snapshot array against the objects we already have, by id: build
+   what is new, update what we know, drop what the host no longer mentions. */
+function netKeep(list,map,arr,stride,make,update){
+  var seen={};
+  for(var i=0;i<arr.length;i+=stride){
+    var id=arr[i];
+    seen[id]=1;
+    var o=map[id];
+    if(!o){ o=make(arr,i); map[id]=o; list.push(o); }
+    else update(o,arr,i);
+  }
+  for(var j=list.length-1;j>=0;j--)
+    if(!seen[list[j].nid]){ delete map[list[j].nid]; list.splice(j,1); }
+}
 function clientEnemy(id,type){
   var e={id:id, type:type?'flesh':'voteless', x:0,y:0,tx:0,ty:0,vx:1,vy:0,
          hp:1,max:1,hit:0,wind:0,cw:0,chg:0,rec:0,cdir:0,stun:0,atk:0,
@@ -3518,15 +3602,16 @@ function clientSnap(m){
       D=makeDiver(P.i,'HELLDIVER');
       D.x=P.x; D.y=P.y; capeInit(D); players.push(D);
     }
-    D.sx=P.x; D.sy=P.y; D.tx=P.x; D.ty=P.y;
+    D.sx=P.x; D.sy=P.y;
     if(D===me){
       /* Only hard-set my own position when I am not predicting, or when the host
          and I have diverged so far that easing back would look worse than a jump. */
       if(D.inPod||D.down||gameOver||Math.hypot(D.x-P.x,D.y-P.y)>120){ D.x=P.x; D.y=P.y; }
     }else{
       /* a squadmate is pure interpolation -- snap only if they teleported */
-      if(Math.hypot(D.x-P.x,D.y-P.y)>400){ D.x=P.x; D.y=P.y; }
-      D.ang=P.a/100; D.kick=P.ki/1000; D.sprint=P.sr;
+      if(Math.hypot(D.x-P.x,D.y-P.y)>400) lerpAt(D,P.x,P.y);
+      else lerpTo(D,P.x,P.y);
+      D.aim=P.a/100; D.kick=P.ki/1000; D.sprint=P.sr;
     }
     var wasDown=D.down;
     D.hp=P.hp; D.wep=P.w;
@@ -3561,13 +3646,14 @@ function clientSnap(m){
     var e=NET.seen[id];
     if(!e){
       e=clientEnemy(id,ty);
-      e.x=m.e[i+2]; e.y=m.e[i+3];
+      lerpAt(e,m.e[i+2],m.e[i+3]);
+      e.face=m.e[i+4]/57.2958;
+      e.aim=e.face;
       NET.seen[id]=e; enemies.push(e);
     }
-    e.tx=m.e[i+2]; e.ty=m.e[i+3];
-    var face=m.e[i+4]/57.2958;
-    e.vx=Math.cos(face)*40; e.vy=Math.sin(face)*40;
-    e.cdir=face;
+    lerpTo(e,m.e[i+2],m.e[i+3]);
+    e.face=m.e[i+4]/57.2958;
+    e.cdir=e.face;
     e.max=100; e.hp=m.e[i+5];
     var fl=m.e[i+6];
     e.hit=(fl&1)?0.1:0; e.wind=(fl&2)?0.4:0; e.cw=(fl&4)?0.4:0;
@@ -3577,36 +3663,53 @@ function clientSnap(m){
     if(!seen[enemies[j].id]){ delete NET.seen[enemies[j].id]; enemies.splice(j,1); }
   }
 
-  sentries.length=0;
-  for(var s2=0;s2<m.s.length;s2+=6)
-    sentries.push({x:m.s[s2],y:m.s[s2+1],ang:m.s[s2+2]/57.2958,
-      hp:m.s[s2+3],max:100,ammo:m.s[s2+4],maxAmmo:100,
-      dying:m.s[s2+5]?1:0,warm:0,cool:0});
+  /* Everything below used to be emptied and refilled on every snapshot. A body
+     rebuilt twelve times a second cannot be interpolated -- it can only blink from
+     one place to the next -- so instead they are matched by id, carried toward the
+     host's word, and only dropped when the host stops mentioning them. */
+  netKeep(sentries,NET.mSt,m.s,7,function(a,i){
+    return {nid:a[i],x:a[i+1],y:a[i+2],ang:a[i+3]/57.2958,aim:a[i+3]/57.2958,
+            hp:a[i+4],max:100,ammo:a[i+5],maxAmmo:100,dying:a[i+6]?1:0,warm:0,cool:0};
+  },function(o,a,i){
+    lerpTo(o,a[i+1],a[i+2]);
+    o.aim=a[i+3]/57.2958;                 /* the barrel swings, it does not jump */
+    o.hp=a[i+4]; o.ammo=a[i+5]; o.dying=a[i+6]?1:0;
+  });
 
   pickups.length=0;
   for(var p2=0;p2<m.pk.length;p2+=3)
     pickups.push({kind:m.pk[p2]?'bulletstorm':'supply',x:m.pk[p2+1],y:m.pk[p2+2],bob:time*3});
 
-  pods.length=0;
-  for(var p3=0;p3<m.pd.length;p3+=5)
-    pods.push({x:m.pd[p3],y:m.pd[p3+1],z:m.pd[p3+2],col:m.pd[p3+3],t:time,vz:0,
-      payload:{kind:'net',pid:m.pd[p3+4]}});
+  netKeep(pods,NET.mPd,m.pd,6,function(a,i){
+    var o={nid:a[i],col:a[i+4],t:time,vz:0,payload:{kind:'net',pid:a[i+5]}};
+    lerpAt(o,a[i+1],a[i+2],a[i+3]);
+    return o;
+  },function(o,a,i){ lerpTo(o,a[i+1],a[i+2],a[i+3]); o.col=a[i+4]; });
 
-  balls.length=0;
-  for(var b3=0;b3<m.bl.length;b3+=6)
-    balls.push({x:m.bl[b3],y:m.bl[b3+1],z:m.bl[b3+2],strat:STRATS[m.bl[b3+3]],
-      landed:!!m.bl[b3+4],call:m.bl[b3+5]/10,spin:time*3,vx:0,vy:0,vz:0});
+  netKeep(balls,NET.mBl,m.bl,7,function(a,i){
+    var o={nid:a[i],strat:STRATS[a[i+4]],landed:!!a[i+5],call:a[i+6]/10,
+           spin:0,vx:0,vy:0,vz:0};
+    lerpAt(o,a[i+1],a[i+2],a[i+3]);
+    return o;
+  },function(o,a,i){
+    lerpTo(o,a[i+1],a[i+2],a[i+3]);
+    o.strat=STRATS[a[i+4]]; o.landed=!!a[i+5]; o.call=a[i+6]/10;
+  });
 
-  bullets.length=0;
-  for(var u2=0;u2<m.bu.length;u2+=6)
-    bullets.push({x:m.bu[u2],y:m.bu[u2+1],px:m.bu[u2]-m.bu[u2+2]*0.016,
-      py:m.bu[u2+1]-m.bu[u2+3]*0.016,vx:m.bu[u2+2],vy:m.bu[u2+3],
-      life:m.bu[u2+4]/100,dmg:0,color:COLIDX[m.bu[u2+5]]||COLIDX[0],size:3});
+  /* A tracer is the one thing not worth interpolating: it flies straight at a
+     known speed, so once we have seen it we can run it ourselves and it stays
+     perfectly smooth instead of jerking back a hundred units every snapshot. */
+  netKeep(bullets,NET.mBu,m.bu,7,function(a,i){
+    return {nid:a[i],x:a[i+1],y:a[i+2],px:a[i+1]-a[i+3]*0.016,py:a[i+2]-a[i+4]*0.016,
+            vx:a[i+3],vy:a[i+4],life:a[i+5]/100,dmg:0,
+            color:COLIDX[a[i+6]]||COLIDX[0],size:3};
+  },function(o,a,i){ o.life=a[i+5]/100; });
 
-  nades.length=0;
-  for(var n2=0;n2<m.nd.length;n2+=4)
-    nades.push({x:m.nd[n2],y:m.nd[n2+1],z:m.nd[n2+2],fuse:m.nd[n2+3]/10,
-      spin:time*14,sx:0,sy:0,tx:0,ty:0,t:0,dur:0.5});
+  netKeep(nades,NET.mNd,m.nd,5,function(a,i){
+    var o={nid:a[i],fuse:a[i+4]/10,spin:0,sx:0,sy:0,tx:0,ty:0,t:0,dur:0.5};
+    lerpAt(o,a[i+1],a[i+2],a[i+3]);
+    return o;
+  },function(o,a,i){ lerpTo(o,a[i+1],a[i+2],a[i+3]); o.fuse=a[i+4]/10; });
 
   if(m.ck) for(var c2=0;c2<m.ck.length;c2+=2){
     var cc=cells[ck(m.ck[c2],m.ck[c2+1])];
@@ -3718,32 +3821,47 @@ function updateClient(dt){
   /* a spectator joined with no Helldiver of their own: they ride the squad, and
      `player` stays a valid object so the HUD and camera keep working */
   if(!me&&players.length) player=players[0];
-  var k=Math.min(1,dt*16);
   for(var i=0;i<enemies.length;i++){
     var e=enemies[i];
-    e.x+=(e.tx-e.x)*k; e.y+=(e.ty-e.y)*k;
+    lerpStep(e,dt);
+    /* face is eased round the short way, so a body changing its mind does not snap */
+    if(e.face!==undefined){
+      e.aim=angLerp(e.aim===undefined?e.face:e.aim,e.face,ease(11,dt));
+      e.vx=Math.cos(e.aim)*40; e.vy=Math.sin(e.aim)*40;
+      e.cdir=e.aim;
+    }
     e.t+=dt; e.hit-=dt;
   }
   for(var b=bullets.length-1;b>=0;b--){
     var u=bullets[b];
     u.px=u.x; u.py=u.y;
     u.x+=u.vx*dt; u.y+=u.vy*dt; u.life-=dt;
-    if(u.life<=0) bullets.splice(b,1);
+    /* the host owns when a tracer stops existing; this is only a backstop for one
+       whose snapshots stopped arriving, so it never blinks back into life */
+    if(u.life<=-0.2){ delete NET.mBu[u.nid]; bullets.splice(b,1); }
+  }
+  for(var lp=0;lp<pods.length;lp++) lerpStep(pods[lp],dt);
+  for(var lb=0;lb<balls.length;lb++){ lerpStep(balls[lb],dt); balls[lb].spin+=dt*3; }
+  for(var ln=0;ln<nades.length;ln++){ lerpStep(nades[ln],dt); nades[ln].spin+=dt*14; }
+  for(var ls=0;ls<sentries.length;ls++){
+    var SS=sentries[ls];
+    lerpStep(SS,dt);
+    if(SS.aim!==undefined) SS.ang=angLerp(SS.ang,SS.aim,ease(14,dt));
   }
   /* ---- local prediction -------------------------------------------------
      Run the same movement maths the host runs, from this keyboard, so walking
      responds instantly instead of after a round trip. The host stays the
      authority: we ease toward its position every frame rather than obeying it
      on arrival. */
-  /* squadmates are the host's to place: ease them toward the last word we had */
-  var sk=Math.min(1,dt*14);
+  /* squadmates are the host's to place: carry them to the last word we had */
   for(var sp2=0;sp2<players.length;sp2++){
     var SP=players[sp2];
     if(SP===me) continue;
-    SP.x+=(SP.tx-SP.x)*sk; SP.y+=(SP.ty-SP.y)*sk;
+    lerpStep(SP,dt);
+    if(SP.aim!==undefined) SP.ang=angLerp(SP.ang,SP.aim,ease(16,dt));
     if(SP.melee>0) SP.melee-=dt;
-    SP.kick-=SP.kick*Math.min(1,dt*9);
-    SP.punch-=SP.punch*Math.min(1,dt*14);
+    SP.kick-=SP.kick*ease(9,dt);
+    SP.punch-=SP.punch*ease(14,dt);
     var _cs=player; player=SP; capeUpdate(dt); player=_cs;
   }
 
@@ -3752,13 +3870,13 @@ function updateClient(dt){
     var pm=Math.hypot(pix,piy)||1; pix/=pm; piy/=pm;
     var psprint=keys['shift']&&(pix||piy);
     var pspd=(psprint?360:230)*(player.stimT>0?1.25:1);
-    player.vx+=(pix*pspd-player.vx)*Math.min(1,dt*12);
-    player.vy+=(piy*pspd-player.vy)*Math.min(1,dt*12);
+    player.vx+=(pix*pspd-player.vx)*ease(12,dt);
+    player.vy+=(piy*pspd-player.vy)*ease(12,dt);
     player.x=clamp(player.x+player.vx*dt,-WORLD,WORLD);
     player.y=clamp(player.y+player.vy*dt,-WORLD,WORLD);
     resolveCircle(player,player.r);
-    player.x+=(player.sx-player.x)*Math.min(1,dt*3.5);
-    player.y+=(player.sy-player.y)*Math.min(1,dt*3.5);
+    player.x+=(player.sx-player.x)*ease(3.5,dt);
+    player.y+=(player.sy-player.y)*ease(3.5,dt);
   } else { player.vx=0; player.vy=0; }
 
   mouse.wx=mouse.x-W/2+cam.x;
@@ -3796,14 +3914,14 @@ function updateClient(dt){
     var cwt=livingDiver(me);
     if(cwt){ ctx2=cwt.x; cty=cwt.y; }
   }
-  cam.x+=(ctx2-cam.x)*Math.min(1,dt*6);
-  cam.y+=(cty-cam.y)*Math.min(1,dt*6);
+  cam.x+=(ctx2-cam.x)*ease(6,dt);
+  cam.y+=(cty-cam.y)*ease(6,dt);
   capeUpdate(dt);
   if(player.melee>0) player.melee-=dt;
-  player.kick-=player.kick*Math.min(1,dt*9);
-  player.punch-=player.punch*Math.min(1,dt*14);
-  camKick.x-=camKick.x*Math.min(1,dt*11);
-  camKick.y-=camKick.y*Math.min(1,dt*11);
+  player.kick-=player.kick*ease(9,dt);
+  player.punch-=player.punch*ease(14,dt);
+  camKick.x-=camKick.x*ease(11,dt);
+  camKick.y-=camKick.y*ease(11,dt);
   for(var c=0;c<buildings.length;c++)
     if(buildings[c].collapse>0) buildings[c].collapse=Math.max(0,buildings[c].collapse-dt);
   for(var p=particles.length-1;p>=0;p--){
@@ -3883,10 +4001,11 @@ function quitToMenu(){
 }
 
 /* ============================ LOOP ============================ */
-var last=0;
+var last=0, FDT=0.016;
 function frame(t){
   var dt=Math.min(0.033,(t-last)/1000||0);
   last=t;
+  FDT=dt;                       /* the draw side eases things too, and needs the step */
   try{
     if(running){
       if(NET.role==='client') updateClient(dt);      /* the host owns the clock */
@@ -3900,6 +4019,7 @@ function frame(t){
         }
       }
     }
+    healthEase();
     draw(); hud(); drawMinimap();
   }
   catch(err){ if(!window.__gameErr) console.error(err); window.__gameErr=err; }
