@@ -136,6 +136,7 @@
     Call <b>RESUPPLY</b> when you run dry and press <b>E</b> on a crate. The <b>BULLETSTORM</b>
     is disposable &mdash; no reloads, thrown away when the drum empties.</p>
     <button class="btn" id="newround" style="display:none;margin-bottom:6px">START NEXT ROUND</button>
+    <button class="btn" id="startmission" style="display:none;margin-bottom:6px">START MISSION</button>
     <div id="maps">
       <button class="btn" data-map="plains">DIVE: THE PLAINS</button>
       <button class="btn" data-map="megacity">DIVE: MEGACITY</button>
@@ -197,8 +198,10 @@ function audioInit(){
 function now(){ return AC.currentTime; }
 function canPlay(){ return AC && !muted && sfxBudget>0; }
 
+var sfxDist=1;           /* 0..1 attenuation for things happening far away */
 function noise(dur,vol,f0,f1,q,type){
   if(!canPlay()) return; sfxBudget--;
+  vol*=sfxDist; if(vol<0.0015) return;
   var t=now(), src=AC.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
   var flt=AC.createBiquadFilter(); flt.type=type||'lowpass';
   flt.frequency.setValueAtTime(f0,t);
@@ -212,6 +215,7 @@ function noise(dur,vol,f0,f1,q,type){
 }
 function tone(type,f0,f1,dur,vol,delay){
   if(!canPlay()) return; sfxBudget--;
+  vol*=sfxDist; if(vol<0.0015) return;
   var t=now()+(delay||0), o=AC.createOscillator(), g=AC.createGain();
   o.type=type; o.frequency.setValueAtTime(f0,t);
   o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);
@@ -931,8 +935,11 @@ function equip(id){
 
 /* ============================ EXPLOSIONS ============================ */
 function explode(x,y,radius,dmg,shakeAmt,col,big){
-  if(NET.role==='host') NET.fx.push([Math.round(x),Math.round(y),Math.round(radius),
-                                     col||'#ffb347',big?1:0,Math.round(shakeAmt)]);
+  /* an explosion the Helldiver cannot see should not be heard at full volume next
+     to their ear -- anything beyond this simply is not sent */
+  if(NET.role==='host'&&Math.hypot(x-player.x,y-player.y)<2200)
+    NET.fx.push([Math.round(x),Math.round(y),Math.round(radius),
+                 col||'#ffb347',big?1:0,Math.round(shakeAmt)]);
   blasts.push({x:x,y:y,r:0,max:radius,t:0,life:0.6,col:col||'#ffb347'});
   shake=Math.max(shake,shakeAmt);
   if(dmg>0) SFX.boom(big);
@@ -966,9 +973,22 @@ function hurt(d){
   if(gameOver||player.guard>0) return;
   player.hp-=d;
   SFX.hurt();
+  /* the GM is not the one being hit, so no red screen for them -- it goes to the
+     Helldiver instead, who is the only one who should feel it */
+  if(NET.role==='host') NET.pf.push(['h',Math.round(d)]);
+  else playerHitFx(d);
+  if(player.hp<=0) die();
+}
+/* screen feedback for the person actually wearing the armour */
+function playerHitFx(d){
   flashEl.style.opacity=Math.min(0.5,d/22);
   setTimeout(function(){ flashEl.style.opacity=0; },90);
-  if(player.hp<=0) die();
+  shake=Math.max(shake,Math.min(9,3+d*0.12));
+}
+
+function stimFx(){
+  stimEl.style.opacity=0.9;
+  setTimeout(function(){ stimEl.style.opacity=0; },500);
 }
 
 /* ============================ STIMS / GRENADES ============================ */
@@ -979,8 +999,8 @@ function useStim(){
   player.stimT=5.0;            /* speed + damage-resist window */
   player.stimHeal=2.2;         /* seconds of rapid healing */
   SFX.stim();
-  stimEl.style.opacity=0.9;
-  setTimeout(function(){ stimEl.style.opacity=0; },500);
+  if(NET.role==='host') NET.pf.push(['s']);
+  else stimFx();
 }
 /* rifle butt to the face: short, wide, and it will chip masonry too */
 function meleeSwing(){
@@ -1528,7 +1548,8 @@ function update(dt){
 
     if(en.hp<=0){
       kills++;
-      if(NET.role==='host') NET.kl.push(Math.round(en.x),Math.round(en.y),flesh?1:0);
+      if(NET.role==='host'&&Math.abs(en.x-player.x)<1500&&Math.abs(en.y-player.y)<1500)
+        NET.kl.push(Math.round(en.x),Math.round(en.y),flesh?1:0);
       if(flesh){
         SFX.burst();
         shake=Math.max(shake,9);
@@ -2350,7 +2371,7 @@ function hud(){
    sends input and receives snapshots. Nothing here runs in solo play. */
 var NET={role:'solo', ws:null, room:'', status:'', note:'', peer:false,
          acc:0, rate:1/12, inAcc:0, inRate:1/20, actions:[],
-         ck:[], ca:[], fx:[], kl:[], sn:[], ping:0, pingAt:0, pingSeq:0,
+         ck:[], ca:[], fx:[], kl:[], sn:[], pf:[], ping:0, pingAt:0, pingSeq:0,
          seen:{}, lastSnap:0, snapGap:0.083, mapId:'megacity'};
 var GM={cx:0, cy:0, credits:26, max:160, rate:2.6, sel:0, cool:0, spent:0, sent:0};
 var GM_UNITS=[{id:'voteless', name:'VOTELESS', cost:1},
@@ -2409,11 +2430,12 @@ function netHandle(m,mode){
       el('roombox').style.display='block';
       break;
     case 'joined':
-      netStatus('joined '+m.room+' — waiting for the Game Master');
+      netStatus('joined '+m.room+' — waiting for the Game Master to start the mission');
       break;
     case 'peer':
-      netStatus('Helldiver connected — deploying');
-      startGM();
+      NET.peer=true;
+      netStatus('HELLDIVER CONNECTED — choose a map, then start the mission');
+      el('startmission').style.display='inline-block';
       break;
     case 'error':
       netStatus(m.why||'refused',true);
@@ -2446,7 +2468,9 @@ function netToMenu(title,body){
 function startGM(){
   audioInit(); musicInit();
   NET.role='host'; NET.peer=true;
+  NET.mapId=el('gmmap').value||'megacity';     /* read it fresh every round */
   buildMap(NET.mapId);
+  el('startmission').style.display='none';
   el('overlay').style.display='none';
   reset();
   GM.credits=26; GM.cool=0; GM.spent=0; GM.sent=0; GM.sel=0;
@@ -2561,6 +2585,7 @@ function netSnapshot(){
   if(NET.fx.length){ snap.fx=NET.fx; NET.fx=[]; }
   if(NET.kl.length){ snap.kl=NET.kl; NET.kl=[]; }
   if(NET.sn.length){ snap.sn=NET.sn; NET.sn=[]; }
+  if(NET.pf.length){ snap.pf=NET.pf; NET.pf=[]; }
   if(armed) snap.ar=armed.id;
   netSend(snap);
 }
@@ -2763,11 +2788,17 @@ function clientSnap(m){
       B2.alive++; B2.dead=false;
     }
   }
+  if(m.pf) for(var v2=0;v2<m.pf.length;v2++){
+    if(m.pf[v2][0]==='h') playerHitFx(m.pf[v2][1]);
+    else if(m.pf[v2][0]==='s'){ stimFx(); SFX.stim(); }
+  }
   if(m.fx) for(var f2=0;f2<m.fx.length;f2++){
     var F=m.fx[f2];
     blasts.push({x:F[0],y:F[1],r:0,max:F[2],t:0,life:0.6,col:F[3]});
-    shake=Math.max(shake,F[5]);
-    SFX.boom(F[4]===1);
+    var fd=Math.hypot(F[0]-player.x,F[1]-player.y);
+    var fall=clamp(1-(fd-F[2])/1500,0,1);
+    shake=Math.max(shake,F[5]*fall);
+    sfxDist=fall; SFX.boom(F[4]===1); sfxDist=1;
     for(var q3=0;q3<40;q3++){
       var aa=rand(0,TAU), sp2=rand(60,F[2]*3);
       particles.push({x:F[0],y:F[1],vx:Math.cos(aa)*sp2,vy:Math.sin(aa)*sp2,
@@ -2777,7 +2808,8 @@ function clientSnap(m){
   if(m.kl) for(var k8=0;k8<m.kl.length;k8+=3){
     var kx=m.kl[k8], ky=m.kl[k8+1], kf=m.kl[k8+2];
     corpses.push({x:kx,y:ky,a:rand(0,TAU),life:kf?12:9,c:kf?'#4a1414':'#3a1550'});
-    if(Math.random()<0.35) SFX.kill();
+    var kd=clamp(1-Math.hypot(kx-player.x,ky-player.y)/1100,0,1);
+    if(kd>0.05&&Math.random()<0.35){ sfxDist=kd; SFX.kill(); sfxDist=1; }
     for(var q4=0;q4<(kf?30:9);q4++){
       var ca2=rand(0,TAU);
       particles.push({x:kx,y:ky,vx:Math.cos(ca2)*rand(40,kf?380:240),
@@ -2873,6 +2905,8 @@ function updateClient(dt){
                         -fw.kickMax,fw.kickMax);
       player.punch=fw.punch;
       var fang=player.ang+player.kick;
+      camKick.x-=Math.cos(fang)*fw.punch*1.5;
+      camKick.y-=Math.sin(fang)*fw.punch*1.5;
       var fmx=player.x+Math.cos(fang)*20, fmy=player.y+Math.sin(fang)*20;
       for(var fq=0;fq<2;fq++)
         particles.push({x:fmx,y:fmy,
@@ -2891,6 +2925,8 @@ function updateClient(dt){
   if(player.melee>0) player.melee-=dt;
   player.kick-=player.kick*Math.min(1,dt*9);
   player.punch-=player.punch*Math.min(1,dt*14);
+  camKick.x-=camKick.x*Math.min(1,dt*11);
+  camKick.y-=camKick.y*Math.min(1,dt*11);
   for(var c=0;c<buildings.length;c++)
     if(buildings[c].collapse>0) buildings[c].collapse=Math.max(0,buildings[c].collapse-dt);
   for(var p=particles.length-1;p>=0;p--){
@@ -3018,6 +3054,7 @@ el('hostbtn').onclick=function(){
   audioInit();
   netOpen('host',null,el('gmmap').value);
 };
+el('startmission').onclick=function(){ if(NET.peer) startGM(); };
 el('joinbtn').onclick=function(){
   audioInit();
   var c=el('joincode').value.trim().toUpperCase();
