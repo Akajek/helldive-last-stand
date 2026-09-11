@@ -58,12 +58,31 @@
   #mp input,#mp select{font:inherit;font-size:12px;background:#14160f;color:#e8e4d8;
       border:1px solid #555;padding:6px 8px;letter-spacing:2px}
   #joincode{width:86px;text-transform:uppercase;text-align:center}
+  #namebox{width:132px;text-transform:uppercase;color:#ffd21e}
   #relayurl{width:230px;letter-spacing:0}
   #netstatus{margin-top:10px;color:#ffd21e;min-height:1.2em}
-  #lobby{margin-top:16px;border-top:1px solid #333;padding-top:14px;max-width:620px;display:none}
+  /* The lobby is its own screen. It used to live inside the menu, which pushed
+     the map buttons off the top and bottom on anything short of a tall monitor. */
+  #lobbyscreen{position:absolute;inset:0;display:none;flex-direction:column;
+      background:#0a0b0d;padding:18px 24px;z-index:6}
+  #lobbyscreen.on{display:flex}
+  .lsbar{display:flex;align-items:center;gap:16px;border-bottom:1px solid #333;
+      padding-bottom:12px;flex:0 0 auto}
+  .lstitle{letter-spacing:3px;opacity:.6;font-size:12px}
+  .lstitle b{color:#ffd21e;font-size:22px;letter-spacing:9px;margin-left:8px}
+  .lsname{margin-left:auto;font-size:11px;letter-spacing:2px;opacity:.75}
+  .lsname input{font:inherit;font-size:12px;background:#14160f;color:#ffd21e;
+      border:1px solid #555;padding:5px 8px;letter-spacing:2px;width:130px;margin-left:6px;
+      text-transform:uppercase}
+  .lscols{flex:1 1 auto;display:flex;gap:26px;overflow:hidden;padding:14px 0;min-height:0}
+  .lscol{flex:1 1 0;min-width:0;overflow-y:auto;overflow-x:hidden;text-align:left}
+  #lobbyscreen #cfgbox .vrow label{width:120px}
+  #lobbyscreen #cfgbox input[type=range]{min-width:0}
+  .lscol h3{margin:0 0 10px;font-size:12px;letter-spacing:3px;opacity:.6;font-weight:normal}
+  .lsfoot{flex:0 0 auto;border-top:1px solid #333;padding-top:12px;text-align:center}
+  .lsfoot .btn{margin-top:0}
   #lobbyhead{letter-spacing:3px;opacity:.6;font-size:12px;margin-bottom:8px}
-  #lobbyhead b{color:#ffd21e;font-size:18px;letter-spacing:8px}
-  #slots{max-height:168px;overflow-y:auto;border:1px solid #333;background:rgba(8,10,8,.5);
+  #slots{flex:1 1 auto;overflow-y:auto;border:1px solid #333;background:rgba(8,10,8,.5);
       padding:6px;margin:10px 0}
   .slot{display:flex;align-items:center;gap:9px;padding:6px 8px;border-bottom:1px solid #222;
       font-size:12px;letter-spacing:1px}
@@ -85,6 +104,8 @@
   #cfgbox.locked #cfglocked{display:block}
   #cfgbox{margin-top:18px;border-top:1px solid #333;padding-top:14px;max-width:620px;
       font-size:12px;letter-spacing:1px}
+  /* inside the lobby it is a column, not a footnote */
+  #lobbyscreen #cfgbox{margin-top:0;border-top:none;padding-top:0;max-width:none}
   #cfgbox .mphead{opacity:.6;letter-spacing:3px;margin-bottom:4px}
   #cfgsum{opacity:.65;font-size:11px;margin-bottom:10px;line-height:1.6em;color:#c6a6ff}
   #cfgbox .vrow{margin:7px 0}
@@ -93,12 +114,25 @@
   .preset{padding:5px 11px;font:inherit;font-size:11px;letter-spacing:2px;background:#2a2f24;
       color:#c6a6ff;border:1px solid #55446e;cursor:pointer;margin:0 4px 6px 0}
   .preset:hover{background:#3a3050}
+  .preset.on{background:#ffd21e;color:#111;border-color:#ffd21e}
   #roombox{margin-top:10px;font-size:14px;letter-spacing:2px}
   #roomcode{font-size:30px;color:#ffd21e;letter-spacing:10px}
   #gmpanel{position:absolute;left:14px;top:12px;display:none;font-size:12px;
       letter-spacing:1px;background:rgba(8,10,8,.72);border:2px solid #000;padding:10px 12px;
       box-shadow:0 0 0 1px #4a3a6a inset}
   body.gm #gmpanel{display:block}
+  /* The Game Master is not carrying a rifle -- none of the Helldiver's furniture
+     means anything to them, so none of it is drawn. */
+  body.gm #botleft, body.gm #botright, body.gm #strat, body.gm #codebox{display:none!important}
+  /* the GM panel owns the top-left corner, so the mission line centres beside it */
+  body.gm #topbar{left:252px;right:216px}
+  #gmsquad{margin:8px 0 4px;border-top:1px solid #33284a;padding-top:7px}
+  #gmsquad .gmd{margin:5px 0;font-size:11px;letter-spacing:1px}
+  #gmsquad .gmdn{display:flex;justify-content:space-between;gap:8px}
+  #gmsquad .gmds{opacity:.75;font-size:10px;letter-spacing:2px}
+  #gmsquad .gmdbar{height:5px;border:1px solid #000;background:#241c30;margin-top:2px}
+  #gmsquad .gmdbar i{display:block;height:100%}
+  #gmstats{opacity:.7;font-size:10.5px;letter-spacing:2px;margin-top:6px}
   #gmpanel h4{margin:0 0 6px;font-size:13px;letter-spacing:3px;color:#c6a6ff}
   #gmcredits{width:210px;height:14px;border:2px solid #000;background:#241c30;margin:4px 0 8px}
   #gmcredits i{display:block;height:100%;background:#a06bff}
@@ -166,8 +200,10 @@
     <div>CREDITS <b id="gmcnum">0</b> <span id="gmrate" style="opacity:.7"></span></div>
     <div id="gmcredits"><i style="width:0%"></i></div>
     <div id="gmpal"></div>
-    <div id="gmhint">WASD pan &middot; SHIFT fast &middot; SPACE centre on Helldiver<br>
-      CLICK / hold to deploy &middot; 1-2 pick unit</div>
+    <div id="gmsquad"></div>
+    <div id="gmstats"></div>
+    <div id="gmhint">WASD pan &middot; SHIFT fast &middot; SPACE nearest Helldiver<br>
+      CLICK / hold to deploy &middot; 1-2 pick unit &middot; ESC menu</div>
   </div>
 
   <div id="pause">
@@ -180,6 +216,12 @@
       <div class="vrow"><label>EFFECTS</label>
         <input type="range" id="volsfx" min="0" max="100" value="90">
         <span class="val" id="volsfxv">90%</span></div>
+      <div class="vrow"><label>HEALTH</label>
+        <span style="flex:1;text-align:right">
+          <button class="preset" data-hp="bottom">CORNER</button>
+          <button class="preset" data-hp="above">OVER ME</button>
+          <button class="preset" data-hp="both">BOTH</button>
+        </span></div>
       <button class="btn" id="resumebtn">RESUME</button>
       <button class="btn btnq" id="quitbtn">ABANDON MISSION</button>
       <div id="pausenote"></div>
@@ -202,7 +244,6 @@
     Call <b>RESUPPLY</b> when you run dry and press <b>E</b> on a crate. The <b>BULLETSTORM</b>
     is disposable &mdash; no reloads, thrown away when the drum empties.</p>
     <button class="btn" id="newround" style="display:none;margin-bottom:6px">START NEXT ROUND</button>
-    <button class="btn" id="startmission" style="display:none;margin-bottom:6px">START MISSION</button>
     <div id="maps">
       <button class="btn" data-map="plains">DIVE: THE PLAINS</button>
       <button class="btn" data-map="megacity">DIVE: MEGACITY</button>
@@ -221,21 +262,13 @@
         <button class="btn2" id="joinbtn">JOIN AS HELLDIVER</button>
         <input id="joincode" maxlength="4" placeholder="CODE">
       </div>
-      <div class="mprow"><span style="opacity:.6">relay</span>
+      <div class="mprow"><span style="opacity:.6">name</span>
+        <input id="namebox" maxlength="14" placeholder="YOUR NAME">
+        <span style="opacity:.6">relay</span>
         <input id="relayurl" placeholder="ws://localhost:8080"></div>
       <div id="netstatus">offline</div>
       <div id="roombox" style="display:none">ROOM CODE <b id="roomcode">----</b><br>
         <span style="opacity:.6;font-size:11px">give this to your Helldiver</span></div>
-    </div>
-
-    <div id="lobby">
-      <div id="lobbyhead">LOBBY <b id="lobbycode">----</b></div>
-      <div id="modeRow">
-        <button class="preset modebtn" data-mode="gm">GM vs PLAYERS</button>
-        <button class="preset modebtn" data-mode="coop">CO-OP</button>
-      </div>
-      <div id="slots"></div>
-      <div id="lobbyhint"></div>
     </div>
 
     <div id="cfgbox">
@@ -274,6 +307,30 @@
       <span style="opacity:.6">&nbsp;or drop an <b>ost.mp3</b> next to this file</span>
     </div>
   </div>
+
+  <div id="lobbyscreen">
+    <div class="lsbar">
+      <div class="lstitle">ROOM CODE <b id="lobbycode">----</b></div>
+      <div class="lsname">NAME<input id="namebox2" maxlength="14"></div>
+      <button class="btn2" id="leavelobby">LEAVE</button>
+    </div>
+    <div class="lscols">
+      <div class="lscol">
+        <h3>&mdash; SQUAD &mdash;</h3>
+        <div id="modeRow">
+          <button class="preset modebtn" data-mode="gm">GM vs PLAYERS</button>
+          <button class="preset modebtn" data-mode="coop">CO-OP</button>
+        </div>
+        <div id="slots"></div>
+        <div id="lobbyhint"></div>
+      </div>
+      <div class="lscol" id="cfgslot"></div>
+    </div>
+    <div class="lsfoot">
+      <button class="btn" id="startmission" style="display:none">START MISSION</button>
+      <div id="netstatus2" style="margin-top:8px;color:#ffd21e;min-height:1.2em;font-size:12px"></div>
+    </div>
+  </div>
 </div>
 <script>
 (function(){
@@ -299,6 +356,23 @@ try{
 }catch(e){}
 function volSave(){
   try{ localStorage.setItem('hd_vol',JSON.stringify(VOL)); }catch(e){}
+}
+/* Where your own health reads: the corner panel, a bar over your Helldiver, or
+   both. Squadmates always get the bar over their head -- you cannot cover
+   someone whose health you have to guess at. */
+var UI={hp:'both'};
+try{
+  var savedUI=localStorage.getItem('hd_ui');
+  if(savedUI){ var su=JSON.parse(savedUI);
+    if(su.hp==='bottom'||su.hp==='above'||su.hp==='both') UI.hp=su.hp; }
+}catch(e){}
+function uiSave(){ try{ localStorage.setItem('hd_ui',JSON.stringify(UI)); }catch(e){} }
+function uiApply(){
+  var b=document.querySelectorAll('[data-hp]');
+  for(var i=0;i<b.length;i++)
+    b[i].className='preset'+(b[i].getAttribute('data-hp')===UI.hp?' on':'');
+  var bl=el('botleft');
+  if(bl) bl.style.display=(UI.hp==='above'&&!amGM())?'none':'';
 }
 function volApply(){
   if(sfxBus) sfxBus.gain.value=muted?0:VOL.sfx;
@@ -1433,11 +1507,18 @@ function onClick(){
 function throwStratagem(tx,ty){
   var armed=player.armed;
   if(!running||!armed||player.inPod) return;
-  /* a call with nobody to answer it is kept, not spent -- stay armed and say so */
-  if(armed.id==='reinforce'&&!anyDown()){
-    SFX.fail();
-    if(player===me) say('NOBODY IS DOWN',2);
-    return;
+  /* a call with nothing to answer it is kept, not spent -- stay armed and say so */
+  if(armed.id==='reinforce'){
+    if(livesLeft<=0){
+      SFX.fail();
+      if(player===me) say('NO REINFORCEMENTS LEFT',2.5);
+      return;
+    }
+    if(!anyDown()){
+      SFX.fail();
+      if(player===me) say('NOBODY IS DOWN',2);
+      return;
+    }
   }
   var a=Math.atan2(ty-player.y,tx-player.x);
   var d=Math.min(700,Math.hypot(tx-player.x,ty-player.y));
@@ -1522,7 +1603,10 @@ function callIn(b){
 function reinforceAt(x,y,who){
   var P=who||me||player;
   if(!P||!P.down) return;
-  P.down=false; P.waiting=0;
+  /* the budget is spent here, on the call -- dying only puts you on the ground */
+  if(livesLeft<=0) return;
+  livesLeft--;
+  P.down=false; P.waiting=0; P.dead=false;
   var spot=freeSpot(clamp(x,-WORLD+40,WORLD-40),clamp(y,-WORLD+40,WORLD-40),22);
   dropPod(spot.x,spot.y,{kind:'player',fresh:true,pid:P.id});
   say(isSquad()?((P.name||'A HELLDIVER')+' IS COMING BACK'):'REINFORCEMENT INBOUND',2.5);
@@ -1636,6 +1720,40 @@ function segHit(x1,y1,x2,y2,cx,cy,r){
 /* ============================ UPDATE ============================ */
 /* One Helldiver, one frame. Called with `player` already aliased to P so the
    shared gunplay helpers (W_, A_, fire, finishReload, capeUpdate) act on it. */
+/* Nobody standing means nobody can make the call, so the ship makes it: as many
+   Helldivers as there are reinforcements left, last to fall first back up, all
+   landing on the ground the last one lost. When there is no budget either, that
+   is the mission. */
+var wipeT=0;
+function squadCheck(dt){
+  if(gameOver||!players.length) return;
+  var standing=false, downs=[];
+  for(var i=0;i<players.length;i++){
+    var P=players[i];
+    if(P.dead) continue;
+    if(P.down) downs.push(P); else standing=true;
+  }
+  if(standing||!downs.length){ wipeT=0; return; }
+  if(livesLeft<=0){
+    for(var j=0;j<downs.length;j++){ downs[j].dead=true; downs[j].hp=0; }
+    endMission();
+    return;
+  }
+  if(wipeT<=0){
+    wipeT=6;
+    SFX.siren();
+    say('SQUAD DOWN — EMERGENCY REDEPLOY',4);
+  }
+  wipeT-=dt;
+  if(wipeT>0) return;
+  wipeT=0;
+  downs.sort(function(a,b){ return b.downAt-a.downAt; });   /* last to fall, first back */
+  var ax=downs[0].x, ay=downs[0].y;
+  for(var k=0;k<downs.length&&livesLeft>0;k++){
+    var an=(k/downs.length)*TAU;
+    reinforceAt(ax+Math.cos(an)*70, ay+Math.sin(an)*70, downs[k]);
+  }
+}
 function updateDiver(P,dt){
   var IN=P.inp, pod=P.inPod;
   if(P.dead){ P.vx=0; P.vy=0; return; }
@@ -1733,16 +1851,7 @@ function update(dt){
   camKick.x-=camKick.x*Math.min(1,dt*11);
   camKick.y-=camKick.y*Math.min(1,dt*11);
 
-  /* Nobody left standing to make the call: the ship drops them itself rather
-     than leaving the squad lying in the street forever. */
-  if(isSquad()&&!gameOver&&anyDown()&&!livingDiver(null))
-    for(var wp=0;wp<players.length;wp++){
-      var WP=players[wp];
-      if(WP.down&&!WP.dead&&WP.waiting<=0){
-        WP.waiting=6;
-        if(WP===me) say('SQUAD DOWN — AUTOMATED REDEPLOY',3.5);
-      }
-    }
+  squadCheck(dt);
 
   /* A GM match is hand-fed; co-op runs the spawner, thickened by squad size. */
   if(GMMATCH){ if(amGM()) gmUpdate(dt); spawnAcc=0; }
@@ -2239,6 +2348,20 @@ function drawBuilding(b,vx0,vy0,vx1,vy1){
     ctx.globalAlpha=1;
   }
 }
+function drawDiverTag(P){
+  var mine=P===me;
+  ctx.font=(mine?'10px':'bold 10px')+' Consolas'; ctx.textAlign='center';
+  ctx.globalAlpha=mine?0.55:1;
+  ctx.fillStyle='rgba(0,0,0,.65)';
+  ctx.fillText(P.name,P.x+1,P.y-35);
+  ctx.fillStyle=mine?'#ffd21e':'#b8e6c0';
+  ctx.fillText(P.name,P.x,P.y-36);
+  ctx.globalAlpha=1;
+  var h=clamp(P.hp/P.maxhp,0,1);
+  ctx.fillStyle='rgba(0,0,0,.65)'; ctx.fillRect(P.x-17,P.y-31,34,4);
+  ctx.fillStyle=P.stimHeal>0?'#78ffa0':h>0.5?'#4fb477':h>0.25?'#ffd21e':'#c1121f';
+  ctx.fillRect(P.x-16.5,P.y-30.5,33*h,3);
+}
 function drawCape(){
   var c=player.cape, n=c.length;
   var left=[], right=[];
@@ -2478,19 +2601,9 @@ function draw(){
       ctx.fillRect(player.x-20,player.y-30,40*(1-player.reloading/w.reload),5);
     }
 
-    /* a squadmate needs a name and a health bar -- you cannot cover someone you
-       cannot pick out of a crowd */
-    if(player!==me){
-      ctx.font='10px Consolas'; ctx.textAlign='center';
-      ctx.fillStyle='rgba(0,0,0,.6)';
-      ctx.fillText(player.name,player.x+1,player.y-35);
-      ctx.fillStyle=player.down?'#ff6b6b':'#b8e6c0';
-      ctx.fillText(player.name,player.x,player.y-36);
-      var ghp=clamp(player.hp/player.maxhp,0,1);
-      ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(player.x-16,player.y-31,32,3);
-      ctx.fillStyle=ghp>0.5?'#4fb477':ghp>0.25?'#ffd21e':'#c1121f';
-      ctx.fillRect(player.x-16,player.y-31,32*ghp,3);
-    }
+    /* Name and health over the head. A squadmate always gets one -- you cannot
+       cover someone you cannot pick out of a crowd -- and your own is a setting. */
+    if(player!==me||UI.hp!=='bottom') drawDiverTag(player);
   }
   player=_dsub;
 
@@ -2617,8 +2730,9 @@ function draw(){
     ctx.fillStyle='#ff6b6b'; ctx.fillText('YOU ARE DOWN',W/2,H*0.38);
     ctx.font='13px Consolas';
     ctx.fillStyle='rgba(232,228,216,.8)';
-    ctx.fillText(livingDiver(me)?'waiting for a squadmate to call ↑↓→←↑'
-                                :'no one left standing — automated redeploy',
+    ctx.fillText(livesLeft<=0 ? 'no reinforcements left'
+               : livingDiver(me) ? 'waiting for a squadmate to call ↑↓→←↑'
+               : 'no one left standing — emergency redeploy in '+Math.max(0,Math.ceil(wipeT))+'s',
                  W/2,H*0.38+24);
   }
   if(toast.t>0){
@@ -2739,6 +2853,22 @@ function hud(){
     el('gmrate').textContent='(+'+perSec.toFixed(1)+'/s)';
     el('gmcredits').firstChild.style.width=(100*GM.credits/GM.max)+'%';
   }
+  /* the GM reads the squad, not a rifle: who is up, who is bleeding, who is down */
+  if(amGM()){
+    var sq='';
+    for(var q2=0;q2<players.length;q2++){
+      var Q=players[q2], qh=clamp(Q.hp/Q.maxhp,0,1);
+      var st=Q.dead?'LOST':Q.down?'DOWN':Q.inPod?'INBOUND':Math.round(Q.hp)+'%';
+      sq+='<div class="gmd"><div class="gmdn"><span>'+Q.name+'</span>'+
+          '<span class="gmds" style="color:'+(Q.dead?'#777':Q.down?'#ff6b6b':'#b8e6c0')+'">'+
+          st+'</span></div>'+
+          '<div class="gmdbar"><i style="width:'+(Q.dead?0:qh*100)+'%;background:'+
+          (qh>0.5?'#4fb477':qh>0.25?'#ffd21e':'#c1121f')+'"></i></div></div>';
+    }
+    var sqe=el('gmsquad'); if(sqe.innerHTML!==sq) sqe.innerHTML=sq;
+    el('gmstats').innerHTML='DEPLOYED '+GM.sent+' &middot; SPENT '+Math.round(GM.spent)+
+      ' &middot; THEY LOST '+kills+'<br>REINFORCEMENTS LEFT '+Math.max(0,livesLeft);
+  }
   el('subline').textContent='KILLS '+kills+'  ·  HORDE LV '+hordeLv+
     '  ·  VOTELESS '+enemies.length+'  ·  '+MAP.name+
     (MAP.city?'  ·  REBUILD IN '+Math.max(0,Math.ceil(nextRebuild-time))+'s':'')+
@@ -2817,8 +2947,31 @@ function netURL(){
 }
 function netStatus(txt,bad){
   NET.note=txt;
-  var e2=el('netstatus');
-  if(e2){ e2.textContent=txt; e2.style.color=bad?'#ff6b6b':'#ffd21e'; }
+  var ids=['netstatus','netstatus2'];
+  for(var i=0;i<ids.length;i++){
+    var e2=el(ids[i]);
+    if(e2){ e2.textContent=txt; e2.style.color=bad?'#ff6b6b':'#ffd21e'; }
+  }
+}
+/* The lobby is a screen of its own, and it borrows the mission-settings box from
+   the menu rather than keeping a second copy of it in sync. */
+function lobbyOpen(){
+  var box=el('cfgbox'), slot=el('cfgslot');
+  if(box&&slot&&box.parentNode!==slot){
+    lobbyOpen.home=box.parentNode;
+    var h=document.createElement('h3');
+    h.textContent='— MISSION SETTINGS —';
+    slot.innerHTML=''; slot.appendChild(h); slot.appendChild(box);
+  }
+  el('lobbyscreen').className='on';
+  el('overlay').style.display='none';
+  syncNameBoxes();
+  lobbyRender();
+}
+function lobbyClose(){
+  var box=el('cfgbox');
+  if(box&&lobbyOpen.home&&box.parentNode!==lobbyOpen.home) lobbyOpen.home.appendChild(box);
+  el('lobbyscreen').className='';
 }
 function netSend(o){
   if(NET.ws&&NET.ws.readyState===1) NET.ws.send(JSON.stringify(o));
@@ -2859,14 +3012,12 @@ function netHandle(m,mode){
       netStatus('room '+m.room+' — share the code');
       el('roomcode').textContent=m.room;
       el('roombox').style.display='block';
-      el('lobby').style.display='block';
-      lobbyRender();
+      lobbyOpen();
       break;
     case 'joined':
       NET.room=m.room; LOBBY.myId=m.id;
       netStatus('joined '+m.room+' — waiting for the host to start');
-      el('lobby').style.display='block';
-      lobbyRender();
+      lobbyOpen();
       break;
     case 'peer':
       NET.peer=true;
@@ -2883,6 +3034,12 @@ function netHandle(m,mode){
       break;
     case 'want':
       lobbyHostWant(m.from,m.role);
+      break;
+    case 'name':
+      if(NET.hosting){
+        var NS=lobbySlot(m.from);
+        if(NS){ NS.name=String(m.name||'').slice(0,14)||NS.name; lobbyBroadcast(); }
+      }
       break;
     case 'error':
       netStatus(m.why||'refused',true);
@@ -2916,6 +3073,7 @@ function netToMenu(title,body){
   el('ovtitle').textContent=title;
   el('ovbody').innerHTML=body;
   el('overlay').style.display='flex';
+  lobbyClose();
   el('roombox').style.display='none';
   if(wasRole!=='solo') netStatus('offline');
 }
@@ -2930,6 +3088,26 @@ function myName(){
   try{ MYNAME=localStorage.getItem('hd_name')||''; }catch(e){}
   if(!MYNAME) MYNAME='DIVER '+(1+Math.floor(Math.random()*89));
   return MYNAME;
+}
+function syncNameBoxes(){
+  var n=myName();
+  var a=el('namebox'), b=el('namebox2');
+  if(a&&document.activeElement!==a) a.value=n;
+  if(b&&document.activeElement!==b) b.value=n;
+}
+/* A name is yours to change until the drop; after that the roster is fixed, so
+   the change waits for the next round rather than half-applying mid-mission. */
+function setMyName(v){
+  v=String(v||'').toUpperCase().replace(/\s+/g,' ').trim().slice(0,14);
+  if(!v) return;
+  MYNAME=v;
+  try{ localStorage.setItem('hd_name',v); }catch(e){}
+  syncNameBoxes();
+  if(NET.hosting){
+    var S=lobbySlot(0);
+    if(S){ S.name=v; lobbyBroadcast(); }
+  } else if(NET.ws&&LOBBY.myId>=0) netSend({t:'name', name:v});
+  if(running&&me) say('NAME APPLIES NEXT ROUND',2.5);
 }
 function lobbySlot(id){
   for(var i=0;i<LOBBY.slots.length;i++) if(LOBBY.slots[i].id===id) return LOBBY.slots[i];
@@ -2978,6 +3156,7 @@ function lobbyHostWant(from,role){
 function lobbyRender(){
   var box=el('slots'); if(!box) return;
   el('lobbycode').textContent=NET.room||'----';
+  syncNameBoxes();
   var html='';
   for(var i=0;i<LOBBY.slots.length;i++){
     var S=LOBBY.slots[i], mine=S.id===LOBBY.myId;
@@ -3044,6 +3223,7 @@ function startGM(){
   NET.mapId=el('gmmap').value||'megacity';     /* read it fresh every round */
   buildMap(NET.mapId);
   el('startmission').style.display='none';
+  lobbyClose();
   el('overlay').style.display='none';
   reset();
   GM.credits=CFG.credits; GM.max=CFG.maxCredits;
@@ -3054,6 +3234,7 @@ function startGM(){
   netSendCity();
   if(amGM()) document.body.classList.add('gm');
   else document.body.classList.remove('gm');
+  uiApply();
 }
 function netSendCity(){
   var b=[], c=[];
@@ -3283,12 +3464,14 @@ function clientCity(m){
      snapshot put everybody where they actually are */
   for(var ip2=0;ip2<players.length;ip2++) players[ip2].inPod=false;
   hordeLv=m.lv||1;
+  lobbyClose();
   el('overlay').style.display='none';
   el('roombox').style.display='none';
   running=true;
   musicStart();
   netStatus('in mission');
   document.body.classList.remove('gm');
+  uiApply();
 }
 function clientEnemy(id,type){
   var e={id:id, type:type?'flesh':'voteless', x:0,y:0,tx:0,ty:0,vx:1,vy:0,
@@ -3625,6 +3808,7 @@ function pauseOpen(){
   paused=true;
   mouse.down=false;
   if(me) me.inp.fire=false;
+  uiApply();
   audioInit(); volApply();
   el('pausesub').textContent = NET.role==='client' ? 'THE MISSION CONTINUES WITHOUT YOU'
                              : amGM()              ? 'MISSION SUSPENDED — YOUR HELLDIVERS ARE WAITING'
@@ -3699,28 +3883,30 @@ function die(who){
     pickups.push({kind:'bulletstorm',x:P.x+rand(-20,20),y:P.y+rand(-20,20),
       bob:rand(0,6),ammo:bs.ammo});
   bs.owned=false; bs.ammo=0;
-  if(livesLeft>0){
-    livesLeft--;
-    P.down=true;
-    P.inPod=true;
-    P.hp=1;
-    P.downAt=time;
-    if(isSquad()){
-      /* no self-service in a squad: you lie there until somebody calls you in */
-      P.waiting=0;
-      if(P===me){ SFX.siren(); say('YOU ARE DOWN — WAIT FOR A REINFORCEMENT',4); }
-      else say((P.name||'A HELLDIVER')+' IS DOWN — CALL THEM IN  ↑↓→←↑',4);
-    }else{
-      P.waiting=8;                    /* alone: pick a drop site before it is chosen for you */
-      if(P===me){ SFX.siren(); say('REINFORCING — CLICK A DROP SITE',3.5); }
-    }
-    return;
+  /* Dying puts you on the ground. It costs nothing -- the reinforcement budget is
+     spent by whoever calls you back up, and if nobody can, you stay there. */
+  P.down=true;
+  P.inPod=true;
+  P.hp=1;
+  P.downAt=time;
+  if(livesLeft<=0){
+    if(P===me){ SFX.siren(); say('YOU ARE DOWN — NO REINFORCEMENTS LEFT',4); }
+    else if(amGM()) say((P.name||'A HELLDIVER')+' IS DOWN — NO REINFORCEMENTS LEFT',4);
+    else say((P.name||'A HELLDIVER')+' IS DOWN — AND THAT IS THE LAST OF THEM',4);
+  }else if(isSquad()){
+    /* no self-service in a squad: you lie there until somebody calls you in */
+    P.waiting=0;
+    if(P===me){ SFX.siren(); say('YOU ARE DOWN — WAIT FOR A REINFORCEMENT',4); }
+    else if(amGM()) say((P.name||'A HELLDIVER')+' IS DOWN',3);
+    else say((P.name||'A HELLDIVER')+' IS DOWN — CALL THEM IN  ↑↓→←↑',4);
+  }else{
+    P.waiting=8;                      /* alone: pick a drop site before it is chosen for you */
+    if(P===me){ SFX.siren(); say('REINFORCING — CLICK A DROP SITE',3.5); }
   }
-  /* budget spent: this one stays down, and the mission ends when the squad is gone */
-  P.dead=true; P.inPod=true; P.hp=0;
-  var anyLeft=false;
-  for(var i=0;i<players.length;i++) if(!players[i].dead) anyLeft=true;
-  if(anyLeft){ say((P.name||'A HELLDIVER')+' IS LOST',3); return; }
+}
+/* the mission is over when the squad is on the ground with no way back up */
+function endMission(){
+  if(gameOver) return;
   gameOver=true; running=false;
   SFX.boom(true);
   if(NET.role==='host')
@@ -3738,7 +3924,10 @@ function die(who){
     el('ovbody').innerHTML='You held out for <b>'+
       Math.floor(time/60)+'m '+Math.floor(time%60)+'s</b> on <b>'+MAP.name+'</b> and eliminated <b>'+
       kills+'</b> of them.<br>All <b>'+CFG.lives+'</b> reinforcements expended — '+
-      'the squad has been wiped.<br><br>Pick a drop site to redeploy.';
+      (isSquad()?'the squad is down with nobody left to call them back up.'
+                :'and the last of them is spent.')+
+      '<br><br>'+(NET.role==='solo'?'Dive again when you are ready.'
+                                   :'Wait for the host to start another round.');
   }
   el('overlay').style.display='flex';
   el('newround').style.display=NET.role==='host'?'inline-block':'none';
@@ -3749,7 +3938,7 @@ function netQuit(){
   NET.role='solo'; NET.peer=false; NET.room=''; NET.hostPaused=false; NET.hosting=false;
   NET.roster=null; GMMATCH=false;
   LOBBY.slots=[]; LOBBY.myId=-1;
-  el('lobby').style.display='none';
+  lobbyClose();
   el('cfgbox').className='';
   el('pausedbanner').style.display='none';
   document.body.classList.remove('gm');
@@ -3774,8 +3963,29 @@ for(var mb=0;mb<mapBtns.length;mb++){
 }
 el('hostbtn').onclick=function(){
   audioInit();
+  if(el('namebox').value.trim()) setMyName(el('namebox').value);
   netOpen('host',null,el('gmmap').value);
 };
+el('leavelobby').onclick=function(){
+  netToMenu('LOBBY LEFT','You stepped out of the lobby. Dive solo, or open another one.');
+};
+var nameIn=['namebox','namebox2'];
+for(var ni=0;ni<nameIn.length;ni++){
+  (function(id){
+    var f=el(id);
+    f.addEventListener('keydown',function(e){
+      e.stopPropagation();
+      if(e.key==='Enter') f.blur();
+    });
+    f.addEventListener('change',function(){ setMyName(f.value); });
+    f.addEventListener('blur',function(){ setMyName(f.value); syncNameBoxes(); });
+  })(nameIn[ni]);
+}
+var hpBtns=document.querySelectorAll('[data-hp]');
+for(var hb=0;hb<hpBtns.length;hb++)
+  hpBtns[hb].onclick=(function(v){
+    return function(){ UI.hp=v; uiSave(); uiApply(); };
+  })(hpBtns[hb].getAttribute('data-hp'));
 el('startmission').onclick=function(){ if(NET.hosting) startGM(); };
 var modeBtns=document.querySelectorAll('[data-mode]');
 for(var mb2=0;mb2<modeBtns.length;mb2++)
@@ -3783,6 +3993,7 @@ for(var mb2=0;mb2<modeBtns.length;mb2++)
     modeBtns[mb2].getAttribute('data-mode'));
 el('joinbtn').onclick=function(){
   audioInit();
+  if(el('namebox').value.trim()) setMyName(el('namebox').value);
   var c=el('joincode').value.trim().toUpperCase();
   if(c.length<4){ netStatus('enter the 4-character room code',true); return; }
   netOpen('join',c,null);
@@ -3807,6 +4018,7 @@ for(var pb=0;pb<presetBtns.length;pb++){
   })(presetBtns[pb].getAttribute('data-preset'));
 }
 cfgApplyUI();
+syncNameBoxes(); uiApply();
 el('resumebtn').onclick=pauseClose;
 el('quitbtn').onclick=quitToMenu;
 el('volmusic').oninput=function(){

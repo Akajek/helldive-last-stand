@@ -68,6 +68,11 @@ Everyone else claims their own slot (**PLAY** or **WATCH**). Mission settings be
 to the host alone; the rest see them greyed out and synced. The mission will not start
 without a sane roster — GM mode needs at least one Helldiver, and so does co-op.
 
+Set your **name** in the menu or in the lobby bar. It is remembered between sessions,
+shows in the slot list, and is painted over your Helldiver's head in the mission so
+the squad can tell each other apart. Changing it mid-mission applies next round — the
+roster is fixed at the drop.
+
 ## The two roles
 
 ### Helldiver
@@ -82,8 +87,19 @@ without a sane roster — GM mode needs at least one Helldiver, and so does co-o
 | `E` | pick up a crate or a dropped weapon |
 | `CTRL` + arrows | stratagem code, then click to throw the beacon |
 | `N` `-` `=` `M` | music on-off / volume / mute all |
+| `ESC` | pause — volumes, and where your health reads |
+
+Your own health can sit in the **corner** panel, on a **bar over your Helldiver**, or
+both; pick it in the pause menu and it is remembered. Squadmates always get the bar
+over their head regardless — you cannot cover someone whose health you have to guess at.
 
 ### Game Master
+
+The Game Master does not carry a rifle, so none of the Helldiver's furniture is drawn
+for them. They get their own panel instead: credits and income rate, the unit palette,
+and a **live squad readout** — every Helldiver's name, health bar and status (`INBOUND`,
+`DOWN`, `LOST`), plus deployments made, credits spent, kills taken off you, and how many
+reinforcements the squad has left.
 
 | | |
 |---|---|
@@ -103,6 +119,11 @@ Reinforcements are a **squad budget**, not a personal one: every death anywhere 
 squad spends one. When they run out, the next Helldiver to fall stays down for good,
 and the round ends once the last one is gone.
 
+Reinforcements are spent **when someone is called back up, not when they fall**. Dying
+only puts you on the ground; the budget only moves when a pod actually comes down for
+you. A call that cannot be answered — nobody down, or nothing left in the budget — is
+refused and costs neither the beacon nor the cooldown.
+
 **On your own**, you pick your own drop site — click where you want to land, or dither
 and the ship picks for you.
 
@@ -111,9 +132,13 @@ shoulder until one of them punches in the **REINFORCE** stratagem — `↑ ↓ �
 throws the beacon. Whoever has been waiting longest comes down at it, on their feet
 with a fresh kit. The call is refused, and costs nothing, if nobody is actually down.
 
-If the *whole* squad goes down at once there is nobody left to make the call, so the
-ship redeploys everyone automatically after six seconds rather than leaving you lying
-in the street. The stratagem does not appear at all in a solo game.
+If the *whole* squad goes down at once there is nobody left to make the call, so after
+six seconds the ship makes it for you — **as many Helldivers as there are reinforcements
+left, last to fall first back up**, all landing on the ground the last one lost. If the
+budget only covers some of you, the rest stay down and have to be called by whoever got
+up. When the budget is gone and everyone is down, that is the mission.
+
+The stratagem does not appear at all in a solo game.
 
 ## Soundtrack
 
