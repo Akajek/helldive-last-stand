@@ -50,10 +50,24 @@ Both of you then just open the deployed URL.
 The **relay** box on the menu is only needed if the page and the relay live in
 different places; leave it blank otherwise.
 
-## The two roles
+## The lobby
 
-One of you hosts as **Game Master**, the other **joins as Helldiver** with the
-4-character room code the host is shown.
+Whoever hosts gets a 4-character room code; up to three more people join with it.
+Everyone lands in a shared lobby with a slot list, and the host picks the mode:
+
+- **GM vs PLAYERS** — one Game Master feeds the horde by hand against the squad.
+- **CO-OP** — everybody drops as Helldivers and the AI spawner runs the horde.
+
+Each player claims their own slot (**PLAY**, **WATCH**, or **TAKE GM**). Mission
+settings belong to the host alone; everyone else sees them greyed out and synced.
+The mission will not start without a sane roster — GM mode needs exactly one Game
+Master and at least one Helldiver, co-op needs at least one Helldiver.
+
+The Game Master has to be the host: the simulation lives on their machine, and
+snapshots are culled around the squad, so an off-host GM would be looking at a map
+with holes in it.
+
+## The two roles
 
 ### Helldiver
 
@@ -73,17 +87,18 @@ One of you hosts as **Game Master**, the other **joins as Helldiver** with the
 | | |
 |---|---|
 | `WASD` | pan the camera (`SHIFT` faster) |
-| `SPACE` | snap the camera to the Helldiver |
+| `SPACE` | snap the camera to the nearest Helldiver |
 | `1` `2` | pick Voteless (1 credit) or Fleshmob (16) |
 | click / hold | deploy at the cursor |
 
 Credits accrue over time and faster as the horde level climbs. You cannot deploy
-within 380 units of the Helldiver, or inside a building — no spawn-camping. The
+within 380 units of any Helldiver, or inside a building — no spawn-camping. The
 automatic horde spawner is switched off in a GM match: every enemy on the map is one
 you placed by hand.
 
-When the Helldiver burns through all four reinforcements, the round ends and the host
-gets a **START NEXT ROUND** button.
+Reinforcements are a **squad budget**, not a personal one: every death anywhere in
+the squad spends one. When they run out, the next Helldiver to fall stays down, and
+the round ends once the last one is gone.
 
 ## Soundtrack
 
@@ -94,23 +109,35 @@ automatically) or choose a file from the menu. A missing `ost.mp3` logs one harm
 
 ## How the multiplayer works
 
-Host-authoritative. The GM's machine runs the entire simulation; the Helldiver sends
-input roughly 20 times a second and receives world snapshots 12 times a second,
-interpolating between them.
+Host-authoritative. The host's machine runs the entire simulation; every other player
+sends input roughly 20 times a second and receives world snapshots 12 times a second,
+interpolating between them. A snapshot carries every Helldiver, so each client draws
+its squadmates with name tags and health bars.
+
+Your own Helldiver is **predicted** locally — your walking and your muzzle flash happen
+on your keypress, and the host's word is eased in rather than snapped, so a round trip
+never shows up as lag on your own body. Squadmates are pure interpolation.
 
 - The city is sent once on join (~9,000 cells) and then only as deltas, because every
   change to it funnels through `killCell` / `smashCells` / `restoreCell`.
-- Enemies are culled to 1,500 units around the Helldiver and quantised to integers.
-  A busy snapshot is a few KB.
-- Explosions, kills and cell changes travel as events; each side plays its own sound
-  and particles from them.
+- Enemies are culled to 1,500 units around the *nearest* Helldiver and quantised to
+  integers. A busy snapshot is a few KB.
+- Explosions, kills, gunshots and cell changes travel as events; each side plays its
+  own sound and particles from them, attenuated by how far away they happened.
+- Damage flashes and stim effects are addressed to one player id, so only the body it
+  happened to feels it — and a shooter never gets their own gunshot replayed to them.
+- Input is routed by sender: your keys only ever move your own Helldiver, and a
+  spectator's keyboard addresses nobody.
 
 **Known limitation:** browsers pause `requestAnimationFrame` in background tabs, so the
-host must keep its window visible or the simulation stalls for both players. This only
-matters if you try to run both roles on one machine.
+host must keep its window visible or the simulation stalls for everybody. This only
+matters if you try to run two roles on one machine.
 
-## What's next
+## Difficulty
 
-Co-op (two Helldivers against the AI horde) is the other half. The networking is done;
-it needs `player` split into a `players[]` array, which touches every "nearest player"
-decision — enemy targeting, explosion falloff, pod crush checks, the camera.
+The mission settings panel is the difficulty dial, and the host owns it. **HORDE RAMP**
+sets how often the horde level climbs, **ENEMIES TOUGHEN** how much of that goes into
+their health, **GM INCOME** and **INCOME RAMPS** how fast the Game Master can spend.
+**SQUAD SCALING** is co-op only: how much thicker the swarm gets per extra Helldiver
+(default +35% each, or turn it off so friends are pure upside). The four presets —
+SWARM, ELITE, BOTH, FLAT — are starting points, not limits.
