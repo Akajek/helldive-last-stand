@@ -60,6 +60,16 @@
   #joincode{width:86px;text-transform:uppercase;text-align:center}
   #relayurl{width:230px;letter-spacing:0}
   #netstatus{margin-top:10px;color:#ffd21e;min-height:1.2em}
+  #cfgbox{margin-top:18px;border-top:1px solid #333;padding-top:14px;max-width:620px;
+      font-size:12px;letter-spacing:1px}
+  #cfgbox .mphead{opacity:.6;letter-spacing:3px;margin-bottom:4px}
+  #cfgsum{opacity:.65;font-size:11px;margin-bottom:10px;line-height:1.6em;color:#c6a6ff}
+  #cfgbox .vrow{margin:7px 0}
+  #cfgbox .vrow label{width:150px;font-size:11px}
+  #cfgbox .val{width:74px;font-size:11px}
+  .preset{padding:5px 11px;font:inherit;font-size:11px;letter-spacing:2px;background:#2a2f24;
+      color:#c6a6ff;border:1px solid #55446e;cursor:pointer;margin:0 4px 6px 0}
+  .preset:hover{background:#3a3050}
   #roombox{margin-top:10px;font-size:14px;letter-spacing:2px}
   #roomcode{font-size:30px;color:#ffd21e;letter-spacing:10px}
   #gmpanel{position:absolute;left:14px;top:12px;display:none;font-size:12px;
@@ -73,6 +83,22 @@
       margin-bottom:4px}
   .gmunit.on{border-color:#c6a6ff;background:#2c2140;color:#e6d6ff}
   #gmhint{opacity:.6;margin-top:8px;line-height:1.6em}
+  #pause{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+      background:rgba(6,7,5,.86);text-align:center;z-index:5}
+  #pause .box{border:2px solid #000;background:#14160f;padding:26px 34px;
+      box-shadow:0 0 0 1px #3a3f2c inset;min-width:340px}
+  #pause h2{margin:0 0 4px;font-size:30px;letter-spacing:8px;color:#ffd21e}
+  #pause .sub{font-size:11px;letter-spacing:2px;opacity:.6;margin-bottom:18px}
+  .vrow{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:12px;letter-spacing:2px}
+  .vrow label{width:74px;text-align:left}
+  .vrow input[type=range]{flex:1;accent-color:#ffd21e}
+  .vrow .val{width:42px;text-align:right;color:#ffd21e}
+  #pause .btn{display:block;width:100%;margin-top:12px}
+  #pause .btnq{background:#5a1a1a;color:#ffd6d6}
+  #pause .btnq:hover{background:#7d2222}
+  #pausenote{font-size:11px;letter-spacing:1px;opacity:.6;margin-top:14px;line-height:1.6em}
+  #pausedbanner{position:absolute;left:50%;top:22%;transform:translateX(-50%);display:none;
+      font-size:22px;letter-spacing:6px;color:#ffd21e;text-shadow:0 2px 0 #000;pointer-events:none}
   #dmgflash{position:absolute;inset:0;background:#c1121f;opacity:0;pointer-events:none;
     transition:opacity .12s}
   #stimflash{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .3s;
@@ -121,6 +147,23 @@
       CLICK / hold to deploy &middot; 1-2 pick unit</div>
   </div>
 
+  <div id="pause">
+    <div class="box">
+      <h2>PAUSED</h2>
+      <div class="sub" id="pausesub">MISSION SUSPENDED</div>
+      <div class="vrow"><label>MUSIC</label>
+        <input type="range" id="volmusic" min="0" max="100" value="45">
+        <span class="val" id="volmusicv">45%</span></div>
+      <div class="vrow"><label>EFFECTS</label>
+        <input type="range" id="volsfx" min="0" max="100" value="90">
+        <span class="val" id="volsfxv">90%</span></div>
+      <button class="btn" id="resumebtn">RESUME</button>
+      <button class="btn btnq" id="quitbtn">ABANDON MISSION</button>
+      <div id="pausenote"></div>
+    </div>
+  </div>
+  <div class="hud" id="pausedbanner">GAME MASTER PAUSED</div>
+
   <div class="hud" id="strat"></div>
   <div class="hud" id="codebox"></div>
 
@@ -162,6 +205,32 @@
         <span style="opacity:.6;font-size:11px">give this to your Helldiver</span></div>
     </div>
 
+    <div id="cfgbox">
+      <div class="mphead">&mdash; MISSION SETTINGS &mdash;</div>
+      <div id="cfgsum"></div>
+      <div>
+        <button class="preset" data-preset="swarm">SWARM</button>
+        <button class="preset" data-preset="elite">ELITE</button>
+        <button class="preset" data-preset="both">BOTH</button>
+        <button class="preset" data-preset="flat">FLAT</button>
+      </div>
+      <div class="vrow"><label>HORDE RAMP</label>
+        <input type="range" id="cfgramp" min="0" max="60" step="5" value="25">
+        <span class="val" id="cfgrampv"></span></div>
+      <div class="vrow"><label>ENEMIES TOUGHEN</label>
+        <input type="range" id="cfgtough" min="0" max="200" step="10" value="100">
+        <span class="val" id="cfgtoughv"></span></div>
+      <div class="vrow"><label>GM INCOME</label>
+        <input type="range" id="cfgincome" min="40" max="300" step="10" value="100">
+        <span class="val" id="cfgincomev"></span></div>
+      <div class="vrow"><label>INCOME RAMPS</label>
+        <input type="range" id="cfgiscale" min="0" max="300" step="10" value="100">
+        <span class="val" id="cfgiscalev"></span></div>
+      <div class="vrow"><label>REINFORCEMENTS</label>
+        <input type="range" id="cfglives" min="1" max="9" step="1" value="4">
+        <span class="val" id="cfglivesv"></span></div>
+    </div>
+
     <div id="musicrow">
       SOUNDTRACK: <span id="musicname">MARCH OF MANAGED DEMOCRACY (original score)</span>
       <br><input type="file" id="musicfile" accept="audio/*">
@@ -183,7 +252,25 @@ function clamp(v,a,b){ return v<a?a:v>b?b:v; }
 var TAU = Math.PI*2;
 
 /* ============================ AUDIO ============================ */
-var AC=null, master=null, muted=false, noiseBuf=null, sfxBudget=0;
+var AC=null, master=null, sfxBus=null, muted=false, noiseBuf=null, sfxBudget=0;
+var VOL={sfx:0.9, music:0.45};
+try{
+  var savedVol=localStorage.getItem('hd_vol');
+  if(savedVol){ var sv=JSON.parse(savedVol);
+    if(typeof sv.sfx==='number') VOL.sfx=sv.sfx;
+    if(typeof sv.music==='number') VOL.music=sv.music; }
+}catch(e){}
+function volSave(){
+  try{ localStorage.setItem('hd_vol',JSON.stringify(VOL)); }catch(e){}
+}
+function volApply(){
+  if(sfxBus) sfxBus.gain.value=muted?0:VOL.sfx;
+  MUS.vol=VOL.music;
+  musicApplyVolume();
+  var a=el('volmusic'), b=el('volsfx');
+  if(a){ a.value=Math.round(VOL.music*100); el('volmusicv').textContent=Math.round(VOL.music*100)+'%'; }
+  if(b){ b.value=Math.round(VOL.sfx*100); el('volsfxv').textContent=Math.round(VOL.sfx*100)+'%'; }
+}
 
 function audioInit(){
   if(AC) { if(AC.state==='suspended') AC.resume(); return; }
@@ -191,6 +278,9 @@ function audioInit(){
   if(!Ctor) return;
   AC=new Ctor();
   master=AC.createGain(); master.gain.value=0.5; master.connect(AC.destination);
+  /* every sound effect runs through its own bus so effects and music are
+     independently adjustable, with master left for the global mute */
+  sfxBus=AC.createGain(); sfxBus.gain.value=VOL.sfx; sfxBus.connect(master);
   var n=AC.sampleRate*1.2; noiseBuf=AC.createBuffer(1,n,AC.sampleRate);
   var d=noiseBuf.getChannelData(0);
   for(var i=0;i<n;i++) d[i]=Math.random()*2-1;
@@ -210,7 +300,7 @@ function noise(dur,vol,f0,f1,q,type){
   var g=AC.createGain();
   g.gain.setValueAtTime(vol,t);
   g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
-  src.connect(flt); flt.connect(g); g.connect(master);
+  src.connect(flt); flt.connect(g); g.connect(sfxBus||master);
   src.start(t); src.stop(t+dur+0.02);
 }
 function tone(type,f0,f1,dur,vol,delay){
@@ -221,7 +311,7 @@ function tone(type,f0,f1,dur,vol,delay){
   o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);
   g.gain.setValueAtTime(vol,t);
   g.gain.exponentialRampToValueAtTime(0.0008,t+dur);
-  o.connect(g); g.connect(master);
+  o.connect(g); g.connect(sfxBus||master);
   o.start(t); o.stop(t+dur+0.02);
 }
 var SFX = {
@@ -279,12 +369,13 @@ var SFX = {
 /* Two sources: an original procedural march written with the same oscillators the
    sound effects use, or any audio file the player supplies (ost.mp3 beside this
    file, or picked from the menu). */
-var MUS={on:true, vol:0.45, gain:null, step:0, next:0, timer:null,
+var MUS={on:true, vol:0.45, gain:null, step:0, next:0, timer:null, hostPaused:false,
          intensity:1, ext:null, extName:''};
 var SCALE=[0,3,5,7,10];                    /* minor pentatonic, heroic enough */
 function musicInit(){
   if(!AC||MUS.gain) return;
   MUS.gain=AC.createGain();
+  MUS.vol=VOL.music;
   MUS.gain.value=MUS.on?MUS.vol:0;
   MUS.gain.connect(master);
 }
@@ -703,6 +794,56 @@ var WORLD = 3000;
 var cam = {x:0,y:0};
 var camKick = {x:0,y:0};
 var REINFORCEMENTS = 4;
+/* Mission settings. The host owns these and ships them to the Helldiver at
+   match start, so both sides agree on the rules. */
+var CFG={ramp:25, tough:1, income:1, incomeScale:1, lives:4, credits:26, maxCredits:160};
+var PRESETS={
+  /* they never toughen -- the GM just gets richer and drowns you in bodies */
+  swarm:{ramp:20, tough:0,   income:1.35, incomeScale:2.0, lives:4},
+  /* a thin stream of increasingly nasty things */
+  elite:{ramp:25, tough:1.8, income:0.85, incomeScale:0,   lives:4},
+  /* everything climbs */
+  both: {ramp:25, tough:1,   income:1,    incomeScale:1,   lives:4},
+  /* nothing climbs: the mission you start is the mission you finish */
+  flat: {ramp:0,  tough:0,   income:1,    incomeScale:0,   lives:4}
+};
+try{
+  var savedCfg=localStorage.getItem('hd_cfg');
+  if(savedCfg){ var sc=JSON.parse(savedCfg);
+    for(var ck2 in CFG) if(typeof sc[ck2]==='number') CFG[ck2]=sc[ck2]; }
+}catch(e){}
+function cfgSave(){ try{ localStorage.setItem('hd_cfg',JSON.stringify(CFG)); }catch(e){} }
+function cfgApplyUI(){
+  var r=el('cfgramp'); if(!r) return;
+  r.value=CFG.ramp;
+  el('cfgtough').value=Math.round(CFG.tough*100);
+  el('cfgincome').value=Math.round(CFG.income*100);
+  el('cfgiscale').value=Math.round(CFG.incomeScale*100);
+  el('cfglives').value=CFG.lives;
+  el('cfgrampv').textContent=CFG.ramp>0?('every '+CFG.ramp+'s'):'OFF';
+  el('cfgtoughv').textContent=CFG.tough>0?Math.round(CFG.tough*100)+'%':'NEVER';
+  el('cfgincomev').textContent=Math.round(CFG.income*100)+'%';
+  el('cfgiscalev').textContent=CFG.incomeScale>0?Math.round(CFG.incomeScale*100)+'%':'FLAT';
+  el('cfglivesv').textContent=CFG.lives;
+  cfgSummary();
+}
+function cfgSummary(){
+  var t=[];
+  t.push(CFG.ramp>0?('Horde level climbs every '+CFG.ramp+'s.'):'Horde level never climbs.');
+  t.push(CFG.tough>0?('Enemies get tougher as it climbs ('+Math.round(CFG.tough*100)+'%).')
+                    :'Enemies never get tougher.');
+  t.push(CFG.incomeScale>0?('GM income speeds up as it climbs ('+Math.round(CFG.incomeScale*100)+'%).')
+                          :'GM income stays flat.');
+  var e2=el('cfgsum'); if(e2) e2.textContent=t.join(' ');
+}
+function cfgRead(){
+  CFG.ramp=+el('cfgramp').value;
+  CFG.tough=el('cfgtough').value/100;
+  CFG.income=el('cfgincome').value/100;
+  CFG.incomeScale=el('cfgiscale').value/100;
+  CFG.lives=+el('cfglives').value;
+  cfgApplyUI(); cfgSave();
+}
 var keys = {};
 var mouse = {x:0,y:0,down:false,wx:0,wy:0};
 /* Everything that moves or aims the Helldiver reads IN, never the keyboard
@@ -753,6 +894,7 @@ var armed=null, typed=[], codeActive=false;
 /* ============================ STATE ============================ */
 var player,bullets,enemies,pickups,sentries,balls,pods,blasts,particles,corpses,nades,junk;
 var time,kills,spawnAcc,running=false,shake,hordeLv,gameOver;
+var paused=false;
 
 var KIT = {grenades:4, stims:4, maxGrenades:6, maxStims:6};
 
@@ -771,7 +913,7 @@ function reset(){
           stimT:0, stimHeal:0, nadeCool:0, inPod:true, cape:[],
           kick:0, punch:0, waiting:0, down:false, guard:0, melee:0, meleeCd:0,
           fxCool:0, fireLatch:false, sx:0, sy:0,
-          lives:REINFORCEMENTS};
+          lives:CFG.lives};
   camKick.x=0; camKick.y=0;
   bullets=[];enemies=[];pickups=[];sentries=[];balls=[];pods=[];blasts=[];
   particles=[];corpses=[];nades=[];junk=[];
@@ -846,17 +988,19 @@ function spawnEnemy(type,anywhere,atx,aty){
   }
   var spot=freeSpot(x,y,type==='flesh'?34:13);
   x=clamp(spot.x,-WORLD,WORLD); y=clamp(spot.y,-WORLD,WORLD);
+  /* toughness scales with the horde level only as far as the settings allow */
+  var lvT=1+(hordeLv-1)*CFG.tough;
   var e={id:++enemyId,type:type,x:x,y:y,vx:0,vy:0,atk:0,hit:0,wob:rand(0,TAU),
          t:rand(0,9),wind:0,stun:0};
   if(type==='flesh'){
     /* a heaving mound of fused bodies: slow, enormously tough, hits like a truck */
-    e.r=34; e.hp=e.max=460+hordeLv*55; e.spd=50+hordeLv*1.4; e.mass=7;
+    e.r=34; e.hp=e.max=460+lvT*55; e.spd=50+lvT*1.4; e.mass=7;
     e.cw=0; e.chg=0; e.rec=0; e.cdir=0; e.slow=0; e.chgCd=rand(2,7);
     e.lumps=[];
     for(var i=0;i<7;i++)
       e.lumps.push({a:rand(0,TAU),d:rand(6,20),s:rand(9,16),ph:rand(0,TAU)});
   }else{
-    e.r=13; e.hp=e.max=34+hordeLv*3; e.spd=rand(78,104)+hordeLv*2.2; e.mass=1;
+    e.r=13; e.hp=e.max=34+lvT*3; e.spd=rand(78,104)+lvT*2.2; e.mass=1;
   }
   enemies.push(e);
 }
@@ -1052,11 +1196,13 @@ addEventListener('keydown',function(e){
   var k=e.key.toLowerCase();
   if(keys[k]&&(k==='g'||k==='q'||k==='r'||k==='e')) return;   /* ignore auto-repeat */
   keys[k]=true;
-  if(k==='m'){ muted=!muted; if(master) master.gain.value=muted?0:0.5; musicApplyVolume(); }
+  if(k==='m'){ muted=!muted; if(master) master.gain.value=muted?0:0.5; volApply(); }
+  if(e.key==='Escape'){ if(running&&!gameOver) pauseToggle(); return; }
+  if(paused) return;                       /* the menu swallows gameplay keys */
   if(NET.role==='host'&&running){ gmKey(k,e); return; }
   if(k==='n'){ musicToggle(); }
-  if(k==='-'||k==='_'){ MUS.vol=Math.max(0,MUS.vol-0.1); musicApplyVolume(); say('MUSIC '+Math.round(MUS.vol*100)+'%',1.2); }
-  if(k==='='||k==='+'){ MUS.vol=Math.min(1,MUS.vol+0.1); musicApplyVolume(); say('MUSIC '+Math.round(MUS.vol*100)+'%',1.2); }
+  if(k==='-'||k==='_'){ VOL.music=Math.max(0,VOL.music-0.1); volApply(); volSave(); say('MUSIC '+Math.round(VOL.music*100)+'%',1.2); }
+  if(k==='='||k==='+'){ VOL.music=Math.min(1,VOL.music+0.1); volApply(); volSave(); say('MUSIC '+Math.round(VOL.music*100)+'%',1.2); }
   if(!running) return;
 
   if(e.key==='Control'){ codeActive=true; typed=[]; }
@@ -1295,7 +1441,7 @@ function segHit(x1,y1,x2,y2,cx,cy,r){
 /* ============================ UPDATE ============================ */
 function update(dt){
   time+=dt;
-  hordeLv=1+Math.floor(time/25);
+  hordeLv=CFG.ramp>0?1+Math.floor(time/CFG.ramp):1;
   MUS.intensity=hordeLv>=6?3:hordeLv>=3?2:1;
   sfxBudget=14;
 
@@ -2466,6 +2612,8 @@ function netToMenu(title,body){
 
 /* ---------------------------------------------------------------- HOST side */
 function startGM(){
+  pauseClose();
+  REINFORCEMENTS=CFG.lives;
   audioInit(); musicInit();
   NET.role='host'; NET.peer=true;
   NET.mapId=el('gmmap').value||'megacity';     /* read it fresh every round */
@@ -2473,7 +2621,8 @@ function startGM(){
   el('startmission').style.display='none';
   el('overlay').style.display='none';
   reset();
-  GM.credits=26; GM.cool=0; GM.spent=0; GM.sent=0; GM.sel=0;
+  GM.credits=CFG.credits; GM.max=CFG.maxCredits;
+  GM.cool=0; GM.spent=0; GM.sent=0; GM.sel=0;
   GM.cx=0; GM.cy=0;
   running=true;
   musicStart();
@@ -2495,7 +2644,7 @@ function netSendCity(){
     }
     c.push(str);
   }
-  netSend({t:'city', map:MAP.id, b:b, c:c, lv:hordeLv});
+  netSend({t:'city', map:MAP.id, b:b, c:c, lv:hordeLv, cfg:CFG});
 }
 function hostInput(m){
   if(NET.role!=='host') return;
@@ -2586,6 +2735,7 @@ function netSnapshot(){
   if(NET.kl.length){ snap.kl=NET.kl; NET.kl=[]; }
   if(NET.sn.length){ snap.sn=NET.sn; NET.sn=[]; }
   if(NET.pf.length){ snap.pf=NET.pf; NET.pf=[]; }
+  if(paused) snap.pz=1;
   if(armed) snap.ar=armed.id;
   netSend(snap);
 }
@@ -2597,7 +2747,8 @@ function gmKey(k,e){
   if(k===' '||k==='c'){ GM.cx=player.x; GM.cy=player.y; }
 }
 function gmUpdate(dt){
-  GM.credits=Math.min(GM.max, GM.credits+GM.rate*dt*(1+hordeLv*0.06));
+  GM.credits=Math.min(GM.max,
+    GM.credits+GM.rate*CFG.income*dt*(1+hordeLv*0.06*CFG.incomeScale));
   GM.cool-=dt;
   var sp=(keys['shift']?900:520)*dt;
   if(keys['d']) GM.cx+=sp;
@@ -2645,8 +2796,13 @@ function drawGM(){
 
 /* -------------------------------------------------------------- CLIENT side */
 function clientCity(m){
+  pauseClose();
   audioInit(); musicInit();
   NET.role='client';
+  /* the host's rules win: adopt them so the HUD and hints match the match */
+  if(m.cfg){ for(var ck3 in CFG) if(typeof m.cfg[ck3]==='number') CFG[ck3]=m.cfg[ck3]; }
+  REINFORCEMENTS=CFG.lives;
+  cfgApplyUI();
   MAP=MAPS[m.map]||MAPS.megacity;
   cells={}; buildings=[]; bgrid={}; rubble=[];
   for(var i=0;i<m.b.length;i++){
@@ -2819,6 +2975,8 @@ function clientSnap(m){
   }
   if(m.sn) for(var s3=0;s3<m.sn.length;s3++){ if(SFX[m.sn[s3]]) SFX[m.sn[s3]](); }
   if(m.gm) GM.credits=m.gm.c;
+  NET.hostPaused=!!m.pz;
+  el('pausedbanner').style.display=NET.hostPaused?'block':'none';
 }
 function clientCode(key){
   typed.push(ARROW[key]);
@@ -2961,6 +3119,48 @@ function updateClient(dt){
   if(NET.pingAt>2){ NET.pingAt=0; netSend({t:'pp', s:performance.now()}); }
 }
 
+/* ============================ PAUSE ============================ */
+/* Solo and the GM genuinely stop the world. A joining Helldiver cannot -- the
+   simulation lives on the host -- so for them this is an overlay, and it says so. */
+function pauseOpen(){
+  if(!running||gameOver) return;
+  paused=true;
+  mouse.down=false; IN.fire=false;
+  audioInit(); volApply();
+  el('pausesub').textContent = NET.role==='client' ? 'THE MISSION CONTINUES WITHOUT YOU'
+                             : NET.role==='host'   ? 'MISSION SUSPENDED — YOUR HELLDIVER IS WAITING'
+                             :                       'MISSION SUSPENDED';
+  el('pausenote').innerHTML = NET.role==='client'
+      ? 'You are not the host, so the horde keeps moving while this is open.<br>ESC to close.'
+      : 'ESC to resume.';
+  el('pause').style.display='flex';
+}
+function pauseClose(){
+  paused=false;
+  el('pause').style.display='none';
+}
+function pauseToggle(){ if(paused) pauseClose(); else pauseOpen(); }
+
+/* Leaving mid-mission. Super Earth takes a dim view of it. */
+function quitToMenu(){
+  pauseClose();
+  var wasNet=NET.role!=='solo';
+  netQuit();
+  running=false; gameOver=true;
+  musicStop();
+  el('ovtitle').textContent='DESERTION LOGGED';
+  el('ovbody').innerHTML=
+    'You abandoned an active mission.<br><br>'+
+    'Your conduct has been forwarded to your Democracy Officer, your cape privileges '+
+    'are under review, and the words <b>"voluntarily reassigned to the front rank"</b> '+
+    'now appear on your service record.'+
+    (wasNet?'<br><br>Your partner has been informed of the betrayal.':'')+
+    '<br><br>Liberty is disappointed. Liberty is patient. Dive again.';
+  el('overlay').style.display='flex';
+  el('newround').style.display='none';
+  el('startmission').style.display='none';
+}
+
 /* ============================ LOOP ============================ */
 var last=0;
 function frame(t){
@@ -2968,11 +3168,13 @@ function frame(t){
   last=t;
   try{
     if(running){
-      if(NET.role==='client') updateClient(dt);
+      if(NET.role==='client') updateClient(dt);      /* the host owns the clock */
       else {
-        update(dt);
+        if(!paused) update(dt);
         if(NET.role==='host'){
           NET.acc+=dt;
+          /* keep shipping snapshots while paused so the Helldiver is told why
+             the world stopped moving */
           if(NET.acc>=NET.rate){ NET.acc=0; netSnapshot(); }
         }
       }
@@ -3031,13 +3233,16 @@ function die(){
 var lastMap='plains';
 function netQuit(){
   if(NET.ws){ try{ NET.ws.close(); }catch(e){} NET.ws=null; }
-  NET.role='solo'; NET.peer=false; NET.room='';
+  NET.role='solo'; NET.peer=false; NET.room=''; NET.hostPaused=false;
+  el('pausedbanner').style.display='none';
   document.body.classList.remove('gm');
   el('roombox').style.display='none';
   netStatus('offline');
 }
 function start(id){
   netQuit();
+  pauseClose();
+  REINFORCEMENTS=CFG.lives;
   audioInit(); musicInit();
   lastMap=id||lastMap;
   buildMap(lastMap);
@@ -3067,6 +3272,30 @@ el('joincode').addEventListener('keydown',function(e){
 });
 el('relayurl').addEventListener('keydown',function(e){ e.stopPropagation(); });
 el('newround').onclick=function(){ if(NET.role==='host'&&NET.peer) startGM(); };
+var cfgIn=['cfgramp','cfgtough','cfgincome','cfgiscale','cfglives'];
+for(var ci2=0;ci2<cfgIn.length;ci2++) el(cfgIn[ci2]).oninput=cfgRead;
+var presetBtns=document.querySelectorAll('.preset');
+for(var pb=0;pb<presetBtns.length;pb++){
+  presetBtns[pb].onclick=(function(name){
+    return function(){
+      var P=PRESETS[name];
+      for(var k3 in P) CFG[k3]=P[k3];
+      cfgApplyUI(); cfgSave();
+    };
+  })(presetBtns[pb].getAttribute('data-preset'));
+}
+cfgApplyUI();
+el('resumebtn').onclick=pauseClose;
+el('quitbtn').onclick=quitToMenu;
+el('volmusic').oninput=function(){
+  VOL.music=this.value/100; el('volmusicv').textContent=this.value+'%';
+  volApply(); volSave();
+};
+el('volsfx').oninput=function(){
+  VOL.sfx=this.value/100; el('volsfxv').textContent=this.value+'%';
+  volApply(); volSave();
+  if(AC&&!muted) SFX.chip();              /* audible preview while dragging */
+};
 var mf=el('musicfile');
 if(mf) mf.onchange=function(){
   var f=this.files&&this.files[0];
