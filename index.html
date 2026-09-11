@@ -1012,6 +1012,12 @@ var STRATS = [
 ];
 var toast={t:0,txt:''};
 function say(txt,secs){ toast.txt=txt; toast.t=secs||3; }
+/* Say something to one particular Helldiver, wherever they are sitting. */
+function sayTo(P,txt,secs){
+  if(!P) return;
+  if(P===me||NET.role==='solo'){ say(txt,secs); return; }
+  if(NET.role==='host'&&NET.pf.length<24) NET.pf.push(['m',txt,P.id,secs||3]);
+}
 var ARROW={ArrowUp:'U',ArrowDown:'D',ArrowLeft:'L',ArrowRight:'R'};
 var GLYPH={U:'↑',D:'↓',L:'←',R:'→'};
 var typed=[], codeActive=false;
@@ -1034,6 +1040,18 @@ function nearestDiver(x,y){
   return best?{p:best,d:bd}:null;
 }
 function diverDist(x,y){ var n=nearestDiver(x,y); return n?n.d:Infinity; }
+/* Same question, but it always has an answer: a squad still in its pods, or flat on
+   its back, is still somewhere, and culling the world around nobody empties it. */
+function anchorDist(x,y){
+  var n=nearestDiver(x,y);
+  if(n) return n.d;
+  var bd=Infinity;
+  for(var i=0;i<players.length;i++){
+    var d=Math.hypot(players[i].x-x,players[i].y-y);
+    if(d<bd) bd=d;
+  }
+  return bd;
+}
 function diverById(id){
   for(var i=0;i<players.length;i++) if(players[i].id===id) return players[i];
   return null;
@@ -1137,7 +1155,7 @@ function reset(){
   camKick.x=0; camKick.y=0;
   bullets=[];enemies=[];pickups=[];sentries=[];balls=[];pods=[];blasts=[];
   particles=[];corpses=[];nades=[];junk=[];
-  time=0;kills=0;spawnAcc=0;shake=0;hordeLv=1;gameOver=false;
+  time=0;kills=0;spawnAcc=0;shake=0;hordeLv=1;gameOver=false;wipeT=0;
   typed=[];codeActive=false;toast.t=0;
   cam.x=player.x; cam.y=player.y;
   enemyId=0; NET.seen={};
@@ -1318,7 +1336,7 @@ function equip(id){
 function explode(x,y,radius,dmg,shakeAmt,col,big){
   /* an explosion the Helldiver cannot see should not be heard at full volume next
      to their ear -- anything beyond this simply is not sent */
-  if(NET.role==='host'&&diverDist(x,y)<2200)
+  if(NET.role==='host'&&anchorDist(x,y)<2200)
     NET.fx.push([Math.round(x),Math.round(y),Math.round(radius),
                  col||'#ffb347',big?1:0,Math.round(shakeAmt)]);
   blasts.push({x:x,y:y,r:0,max:radius,t:0,life:0.6,col:col||'#ffb347'});
@@ -1511,12 +1529,12 @@ function throwStratagem(tx,ty){
   if(armed.id==='reinforce'){
     if(livesLeft<=0){
       SFX.fail();
-      if(player===me) say('NO REINFORCEMENTS LEFT',2.5);
+      sayTo(player,'NO REINFORCEMENTS LEFT',2.5);
       return;
     }
     if(!anyDown()){
       SFX.fail();
-      if(player===me) say('NOBODY IS DOWN',2);
+      sayTo(player,'NOBODY IS DOWN',2);
       return;
     }
   }
@@ -1739,6 +1757,9 @@ function squadCheck(dt){
     endMission();
     return;
   }
+  /* On your own there is no emergency: you have your own countdown and your own
+     choice of drop site, and this must not reach in and take it from you. */
+  if(!isSquad()){ wipeT=0; return; }
   if(wipeT<=0){
     wipeT=6;
     SFX.siren();
@@ -2045,7 +2066,7 @@ function update(dt){
 
     if(en.hp<=0){
       kills++;
-      if(NET.role==='host'&&diverDist(en.x,en.y)<1500)
+      if(NET.role==='host'&&anchorDist(en.x,en.y)<1500)
         NET.kl.push(Math.round(en.x),Math.round(en.y),flesh?1:0);
       if(flesh){
         SFX.burst();
@@ -3300,7 +3321,7 @@ function netSnapshot(){
   for(var i=0;i<enemies.length;i++){
     var en=enemies[i];
     /* culled against the whole squad: what one Helldiver can see, all get sent */
-    if(diverDist(en.x,en.y)>cull) continue;
+    if(anchorDist(en.x,en.y)>cull) continue;
     var fl=(en.hit>0?1:0)|(en.wind>0?2:0)|(en.cw>0?4:0)|(en.chg>0?8:0)|(en.rec>0?16:0);
     var face=en.chg>0?en.cdir:Math.atan2(en.vy,en.vx);
     e.push(en.id, en.type==='flesh'?1:0, R(en.x), R(en.y),
@@ -3348,6 +3369,7 @@ function netSnapshot(){
   if(NET.mk.length){ snap.mk=NET.mk; NET.mk=[]; }
   if(NET.sp.length){ snap.sp=NET.sp; NET.sp=[]; }
   if(paused) snap.pz=1;
+  if(wipeT>0) snap.wp=Math.round(wipeT*10);
   netSend(snap);
 }
 /* one Helldiver's worth of state, small enough to send four of */
@@ -3391,7 +3413,7 @@ function gmTrySpawn(){
   var u=GM_UNITS[GM.sel];
   if(GM.credits<u.cost) return;
   var x=mouse.wx, y=mouse.wy;
-  if(diverDist(x,y)<GM_MIN_RANGE) return;
+  if(anchorDist(x,y)<GM_MIN_RANGE) return;
   if(Math.abs(x)>WORLD-40||Math.abs(y)>WORLD-40) return;
   if(MAP.city&&pointInWall(x,y)) return;
   GM.credits-=u.cost; GM.cool=u.cost>4?0.45:0.09; GM.spent+=u.cost; GM.sent++;
@@ -3411,7 +3433,7 @@ function drawGM(){
   });
   ctx.setLineDash([]);
   var u=GM_UNITS[GM.sel], ok=GM.credits>=u.cost&&
-      diverDist(mouse.wx,mouse.wy)>=GM_MIN_RANGE&&
+      anchorDist(mouse.wx,mouse.wy)>=GM_MIN_RANGE&&
       !(MAP.city&&pointInWall(mouse.wx,mouse.wy));
   ctx.strokeStyle=ok?'rgba(180,90,214,.85)':'rgba(255,80,60,.6)';
   ctx.lineWidth=2;
@@ -3506,6 +3528,7 @@ function clientSnap(m){
       if(Math.hypot(D.x-P.x,D.y-P.y)>400){ D.x=P.x; D.y=P.y; }
       D.ang=P.a/100; D.kick=P.ki/1000; D.sprint=P.sr;
     }
+    var wasDown=D.down;
     D.hp=P.hp; D.wep=P.w;
     D.arsenal[P.w].ammo=P.am; D.arsenal[P.w].mags=P.mg; D.arsenal[P.w].owned=true;
     D.arsenal.bulletstorm.owned=!!P.bo; D.arsenal.bulletstorm.ammo=P.ba;
@@ -3514,6 +3537,17 @@ function clientSnap(m){
     D.waiting=P.wt/10; D.down=!!P.dn; D.inPod=!!P.ip; D.dead=!!P.dd;
     D.stimT=P.st/10;
     if(P.ml>0&&D.melee<=0) D.melee=P.ml/100;
+    /* the host owns the deaths, so the news of them arrives with the snapshot */
+    if(!wasDown&&D.down){
+      if(D===me){
+        SFX.siren();
+        say(livesLeft>0?'YOU ARE DOWN — WAIT FOR A REINFORCEMENT'
+                       :'YOU ARE DOWN — NO REINFORCEMENTS LEFT',4);
+      } else say((D.name||'A HELLDIVER')+
+        (livesLeft>0?' IS DOWN — CALL THEM IN  ↑↓→←↑':' IS DOWN — AND THAT IS THE LAST OF THEM'),4);
+    } else if(wasDown&&!D.down&&D!==me){
+      say((D.name||'A HELLDIVER')+' IS COMING BACK',2.5);
+    }
     for(var cq=0;cq<P.cd.length&&cq<D.stt.length;cq++) D.stt[cq]=P.cd[cq]/10;
     D.armed=null;
     if(P.ar) for(var aq=0;aq<STRATS.length;aq++) if(STRATS[aq].id===P.ar) D.armed=STRATS[aq];
@@ -3597,6 +3631,7 @@ function clientSnap(m){
     if(!me||(PF[2]!==undefined&&PF[2]!==me.id)) continue;
     if(PF[0]==='h') playerHitFx(PF[1]);
     else if(PF[0]==='s'){ stimFx(); SFX.stim(); }
+    else if(PF[0]==='m'){ say(PF[1],PF[3]); SFX.fail(); }
   }
   /* squadmates' rifles, attenuated by how far away they are */
   if(m.sp) for(var sq=0;sq<m.sp.length;sq+=4){
@@ -3633,6 +3668,9 @@ function clientSnap(m){
   }
   if(m.sn) for(var s3=0;s3<m.sn.length;s3++){ if(SFX[m.sn[s3]]) SFX[m.sn[s3]](); }
   if(m.gm) GM.credits=m.gm.c;
+  var hadWipe=wipeT;
+  wipeT=m.wp?m.wp/10:0;
+  if(wipeT>0&&hadWipe<=0){ SFX.siren(); say('SQUAD DOWN — EMERGENCY REDEPLOY',4); }
   NET.hostPaused=!!m.pz;
   el('pausedbanner').style.display=NET.hostPaused?'block':'none';
 }
@@ -3926,8 +3964,8 @@ function endMission(){
       kills+'</b> of them.<br>All <b>'+CFG.lives+'</b> reinforcements expended — '+
       (isSquad()?'the squad is down with nobody left to call them back up.'
                 :'and the last of them is spent.')+
-      '<br><br>'+(NET.role==='solo'?'Dive again when you are ready.'
-                                   :'Wait for the host to start another round.');
+      '<br><br>'+(NET.role==='client'?'Wait for the host to start another round.'
+                                     :'Start another round when you are ready.');
   }
   el('overlay').style.display='flex';
   el('newround').style.display=NET.role==='host'?'inline-block':'none';
