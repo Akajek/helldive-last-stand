@@ -926,6 +926,8 @@ var WEAPONS = {
 /* ============================ STRATAGEMS ============================ */
 /* callIn = seconds from the ball coming to rest until the payload arrives */
 var STRATS = [
+  /* squadOnly: pointless on your own, so it stays off a solo loadout entirely */
+  {id:'reinforce',name:'REINFORCE',    code:['U','D','R','L','U'],     cd:4,  callIn:2.0, pod:true, squadOnly:true, color:'#4fb477'},
   {id:'eagle',   name:'EAGLE 500KG',    code:['U','R','D','D','D'],     cd:24, callIn:3.5, pod:false, color:'#ff6b3d'},
   {id:'sentry',  name:'GATLING SENTRY', code:['D','U','R','L'],         cd:28, callIn:2.5, pod:true,  color:'#7fd4ff'},
   {id:'bulletstorm',name:'BULLETSTORM', code:['D','L','D','U','U','L'], cd:50, callIn:3.0, pod:true,  color:'#c6ff6b'},
@@ -984,6 +986,24 @@ function myPod(){
     if(pods[i].payload&&pods[i].payload.pid===me.id) return pods[i];
   return null;
 }
+function isSquad(){ return players.length>1; }
+function anyDown(){
+  for(var i=0;i<players.length;i++)
+    if(players[i].down&&!players[i].dead) return true;
+  return false;
+}
+/* the nearest Helldiver still on their feet -- who a downed player watches, and
+   who the horde is actually a problem for */
+function livingDiver(not){
+  var best=null, bd=Infinity;
+  for(var i=0;i<players.length;i++){
+    var P=players[i];
+    if(P===not||P.dead||P.down) continue;
+    var d=not?Math.hypot(P.x-not.x,P.y-not.y):0;
+    if(d<bd){ bd=d; best=P; }
+  }
+  return best;
+}
 function squadMul(){
   var n=0;
   for(var i=0;i<players.length;i++) if(!players[i].dead) n++;
@@ -1017,7 +1037,7 @@ function makeDiver(id,name){
          stimT:0, stimHeal:0, nadeCool:0, inPod:true, cape:[],
          kick:0, punch:0, waiting:0, down:false, guard:0, melee:0, meleeCd:0,
          fxCool:0, fireLatch:false, semiLatch:false, sx:0, sy:0, tx:0, ty:0,
-         id:id, name:name||('DIVER '+id), dead:false, armed:null, stt:[],
+         id:id, name:name||('DIVER '+id), dead:false, armed:null, stt:[], downAt:0,
          inp:freshInput()};
   for(var i=0;i<STRATS.length;i++) D.stt.push(0);
   return D;
@@ -1359,7 +1379,8 @@ addEventListener('keydown',function(e){
     typed.push(ARROW[e.key]);
     var t=typed.join(''), pre=[];
     for(var i=0;i<STRATS.length;i++)
-      if(STRATS[i].code.join('').indexOf(t)===0) pre.push(STRATS[i]);
+      if(STRATS[i].code.join('').indexOf(t)===0&&!(STRATS[i].squadOnly&&!isSquad()))
+        pre.push(STRATS[i]);
     if(!pre.length){ typed=[]; SFX.fail(); }
     else{
       SFX.beep(typed.length);
@@ -1403,12 +1424,21 @@ function onClick(){
   audioInit();
   if(amGM()){ gmClick(); return; }
   if(NET.role==='client'){ clientClick(); return; }
-  if(running&&me&&me.down){ reinforceAt(mouse.wx,mouse.wy,me); return; }
+  if(running&&me&&me.down){
+    if(me.waiting>0) reinforceAt(mouse.wx,mouse.wy,me);
+    return;
+  }
   throwStratagem(mouse.wx,mouse.wy);
 }
 function throwStratagem(tx,ty){
   var armed=player.armed;
   if(!running||!armed||player.inPod) return;
+  /* a call with nobody to answer it is kept, not spent -- stay armed and say so */
+  if(armed.id==='reinforce'&&!anyDown()){
+    SFX.fail();
+    if(player===me) say('NOBODY IS DOWN',2);
+    return;
+  }
   var a=Math.atan2(ty-player.y,tx-player.x);
   var d=Math.min(700,Math.hypot(tx-player.x,ty-player.y));
   /* the ball is a physical object — it flies, bounces and rolls, and whatever it
@@ -1463,6 +1493,16 @@ function callIn(b){
     if(NET.role==='host') NET.mk.push(Math.round(x),Math.round(y));
     SFX.siren();
     setTimeout(function(){ if(running) explode(x,y,270,900,26,'#ff6b3d',true); },1500);
+  }else if(s.id==='reinforce'){
+    /* longest wait comes down first -- the squad does not get to play favourites */
+    var first=null;
+    for(var ri=0;ri<players.length;ri++){
+      var RP=players[ri];
+      if(!RP.down||RP.dead) continue;
+      if(!first||RP.downAt<first.downAt) first=RP;
+    }
+    if(first) reinforceAt(x,y,first);
+    else puff(x,y,'#4fb477');
   }else if(s.id==='liberty'){
     /* every pod Super Earth could spare, all at once */
     SFX.siren();
@@ -1485,7 +1525,7 @@ function reinforceAt(x,y,who){
   P.down=false; P.waiting=0;
   var spot=freeSpot(clamp(x,-WORLD+40,WORLD-40),clamp(y,-WORLD+40,WORLD-40),22);
   dropPod(spot.x,spot.y,{kind:'player',fresh:true,pid:P.id});
-  say('REINFORCEMENT INBOUND',2.5);
+  say(isSquad()?((P.name||'A HELLDIVER')+' IS COMING BACK'):'REINFORCEMENT INBOUND',2.5);
 }
 
 /* ---- hellpods ---- */
@@ -1621,9 +1661,10 @@ function updateDiver(P,dt){
   }
   P.ang=Math.atan2(IN.ay-P.y,IN.ax-P.x);
 
-  if(P.down){
+  /* a countdown only runs when there is one: alone, or when the whole squad is
+     down and there is nobody left to make the call */
+  if(P.down&&P.waiting>0){
     P.waiting-=dt;
-    /* dithered too long: dropped anyway, wherever they were last aiming */
     if(P.waiting<=0) reinforceAt(IN.ax,IN.ay,P);
   }
 
@@ -1681,11 +1722,27 @@ function update(dt){
   var lean=eye.waiting>0?0.6:0.16;
   var camTx=eye.x+(eye.inp.ax-eye.x)*lean, camTy=eye.y+(eye.inp.ay-eye.y)*lean;
   if(eyePod){ var mp=myPod(); if(mp){ camTx=mp.x; camTy=mp.y; } }
+  /* lying in the street is dull: ride a squadmate until somebody calls you in */
+  if(me&&me.down&&me.waiting<=0){
+    var wt=livingDiver(me);
+    if(wt){ camTx=wt.x; camTy=wt.y; }
+  }
   if(amGM()){ camTx=GM.cx; camTy=GM.cy; }
   cam.x+=(camTx-cam.x)*Math.min(1,dt*(eyePod?3:6));
   cam.y+=(camTy-cam.y)*Math.min(1,dt*(eyePod?3:6));
   camKick.x-=camKick.x*Math.min(1,dt*11);
   camKick.y-=camKick.y*Math.min(1,dt*11);
+
+  /* Nobody left standing to make the call: the ship drops them itself rather
+     than leaving the squad lying in the street forever. */
+  if(isSquad()&&!gameOver&&anyDown()&&!livingDiver(null))
+    for(var wp=0;wp<players.length;wp++){
+      var WP=players[wp];
+      if(WP.down&&!WP.dead&&WP.waiting<=0){
+        WP.waiting=6;
+        if(WP===me) say('SQUAD DOWN — AUTOMATED REDEPLOY',3.5);
+      }
+    }
 
   /* A GM match is hand-fed; co-op runs the spawner, thickened by squad size. */
   if(GMMATCH){ if(amGM()) gmUpdate(dt); spawnAcc=0; }
@@ -2528,7 +2585,7 @@ function draw(){
   }
   ctx.globalAlpha=1;
 
-  if(me&&me.down&&!gameOver){
+  if(me&&me.down&&me.waiting>0&&!gameOver){
     var rx=mouse.wx, ry=mouse.wy;
     ctx.strokeStyle='rgba(255,210,30,'+(0.5+0.5*Math.abs(Math.sin(time*8)))+')';
     ctx.lineWidth=3;
@@ -2553,6 +2610,17 @@ function draw(){
   }
 
   ctx.setTransform(1,0,0,1,0,0);
+  if(me&&me.down&&me.waiting<=0&&!gameOver){
+    ctx.font='bold 22px Consolas'; ctx.textAlign='center';
+    ctx.fillStyle='rgba(0,0,0,.7)';
+    ctx.fillText('YOU ARE DOWN',W/2+2,H*0.38+2);
+    ctx.fillStyle='#ff6b6b'; ctx.fillText('YOU ARE DOWN',W/2,H*0.38);
+    ctx.font='13px Consolas';
+    ctx.fillStyle='rgba(232,228,216,.8)';
+    ctx.fillText(livingDiver(me)?'waiting for a squadmate to call ↑↓→←↑'
+                                :'no one left standing — automated redeploy',
+                 W/2,H*0.38+24);
+  }
   if(toast.t>0){
     ctx.globalAlpha=Math.min(1,toast.t);
     ctx.font='bold 26px Consolas'; ctx.textAlign='center';
@@ -2707,6 +2775,8 @@ function hud(){
   for(var s=0;s<STRATS.length;s++){
     var t=STRATS[s], chip=el('chip_'+t.id);
     if(!chip) continue;
+    if(t.squadOnly&&!isSquad()){ chip.style.display='none'; continue; }
+    chip.style.display='';
     var left=me?me.stt[s]:0, ready=left<=0, isArmed=!!(me&&me.armed===t);
     chip.className='chip '+(isArmed?'ready':ready?'':'cool');
     var codeStr='';
@@ -2870,9 +2940,13 @@ function lobbyCount(role){
   for(var i=0;i<LOBBY.slots.length;i++) if(LOBBY.slots[i].role===role) n++;
   return n;
 }
-/* In GM mode the lobby creator runs the horde: the simulation lives on their
-   machine, and an off-host GM would need an uncultured view of the whole map. */
+/* In GM mode the lobby creator IS the Game Master -- not by choice, by wiring.
+   The simulation lives on their machine and snapshots are culled around the
+   squad, so an off-host GM would be looking at a map with holes in it. Nobody
+   else can take the role and the host cannot put it down; switch to co-op if
+   you want to play. */
 function lobbyDefaultRole(id){ return (LOBBY.mode==='gm'&&id===0)?'gm':'diver'; }
+function lobbyLocked(id){ return LOBBY.mode==='gm'&&id===0; }
 function lobbyBroadcast(){
   if(NET.role!=='host'&&!NET.hosting) return;
   netSend({t:'lobby', mode:LOBBY.mode, slots:LOBBY.slots, cfg:CFG});
@@ -2883,31 +2957,21 @@ function lobbySetMode(m){
   LOBBY.mode=m;
   for(var i=0;i<LOBBY.slots.length;i++){
     var S=LOBBY.slots[i];
-    if(m==='coop'&&S.role==='gm') S.role='diver';
-    if(m==='gm'&&i===0&&S.role==='diver'&&!lobbyCount('gm')) S.role='gm';
+    if(S.role==='gm') S.role='diver';          /* the badge only lives on slot 0 */
+    if(m==='gm'&&S.id===0) S.role='gm';        /* and in GM mode it always does */
   }
   lobbyBroadcast();
 }
 function lobbyWant(role){
-  if(NET.hosting){
-    var S=lobbySlot(0);
-    if(!S) return;
-    if(role==='gm'&&LOBBY.mode!=='gm') return;
-    if(role==='gm') for(var i=0;i<LOBBY.slots.length;i++)
-      if(LOBBY.slots[i].role==='gm') LOBBY.slots[i].role='diver';
-    S.role=role;
-    lobbyBroadcast();
-  } else netSend({t:'want', role:role});
+  if(NET.hosting) lobbyHostWant(0,role);
+  else netSend({t:'want', role:role});
 }
 function lobbyHostWant(from,role){
   if(!NET.hosting) return;
   var S=lobbySlot(from);
   if(!S) return;
-  if(role==='gm'){
-    if(LOBBY.mode!=='gm') return;
-    for(var i=0;i<LOBBY.slots.length;i++)
-      if(LOBBY.slots[i].role==='gm') LOBBY.slots[i].role='diver';
-  }
+  if(role==='gm') return;             /* the GM badge is not up for grabs */
+  if(lobbyLocked(S.id)) return;       /* and the host cannot put it down */
   S.role=role;
   lobbyBroadcast();
 }
@@ -2922,9 +2986,9 @@ function lobbyRender(){
         (S.role==='gm'?'GAME MASTER':S.role==='spec'?'SPECTATOR':'HELLDIVER')+'</span>'+
       '<span class="nm">'+S.name+(S.id===0?' <span class="you">(host)</span>':'')+
         (mine?' <span class="you">(you)</span>':'')+'</span>';
-    if(mine){
-      if(LOBBY.mode==='gm'&&S.role!=='gm')
-        html+='<button class="preset" data-want="gm">TAKE GM</button>';
+    if(mine&&lobbyLocked(S.id))
+      html+='<span class="you">you made the lobby — switch to CO-OP to play</span>';
+    else if(mine){
       if(S.role!=='diver') html+='<button class="preset" data-want="diver">PLAY</button>';
       if(S.role!=='spec') html+='<button class="preset" data-want="spec">WATCH</button>';
     }
@@ -2952,7 +3016,7 @@ function lobbyRender(){
   var hint;
   if(LOBBY.mode==='gm')
     hint=gms!==1 ? 'GM mode needs exactly one Game Master.'
-       : divers<1 ? 'GM mode needs at least one Helldiver.'
+       : divers<1 ? 'You run the horde. Waiting for at least one Helldiver to join.'
        : 'Ready: '+divers+' Helldiver'+(divers>1?'s':'')+' against the Game Master.';
   else
     hint=divers<1 ? 'Co-op needs at least one Helldiver.'
@@ -3393,7 +3457,8 @@ function clientCode(key){
   typed.push(ARROW[key]);
   var t=typed.join(''), pre=[];
   for(var i=0;i<STRATS.length;i++)
-    if(STRATS[i].code.join('').indexOf(t)===0) pre.push(STRATS[i]);
+    if(STRATS[i].code.join('').indexOf(t)===0&&!(STRATS[i].squadOnly&&!isSquad()))
+      pre.push(STRATS[i]);
   if(!pre.length){ typed=[]; SFX.fail(); return; }
   SFX.beep(typed.length);
   for(var j=0;j<pre.length;j++){
@@ -3406,7 +3471,10 @@ function clientCode(key){
 }
 function clientClick(){
   if(!running||!me) return;
-  if(me.down){ netAct('R:'+Math.round(mouse.wx)+','+Math.round(mouse.wy)); return; }
+  if(me.down){
+    if(me.waiting>0) netAct('R:'+Math.round(mouse.wx)+','+Math.round(mouse.wy));
+    return;
+  }
   if(me.armed){
     netAct('T:'+Math.round(mouse.wx)+','+Math.round(mouse.wy));
     me.armed=null;
@@ -3503,6 +3571,10 @@ function updateClient(dt){
   var lean=player.down?0.6:0.16;
   var ctx2=player.x+(mouse.wx-player.x)*lean, cty=player.y+(mouse.wy-player.y)*lean;
   if(me&&me.inPod){ var cmp=myPod(); if(cmp){ ctx2=cmp.x; cty=cmp.y; } }
+  if(me&&me.down&&me.waiting<=0){
+    var cwt=livingDiver(me);
+    if(cwt){ ctx2=cwt.x; cty=cwt.y; }
+  }
   cam.x+=(ctx2-cam.x)*Math.min(1,dt*6);
   cam.y+=(cty-cam.y)*Math.min(1,dt*6);
   capeUpdate(dt);
@@ -3630,11 +3702,18 @@ function die(who){
   if(livesLeft>0){
     livesLeft--;
     P.down=true;
-    P.waiting=8;                      /* time to pick a drop site before it is chosen for you */
     P.inPod=true;
     P.hp=1;
-    if(P===me){ SFX.siren(); say('REINFORCING — CLICK A DROP SITE',3.5); }
-    else say((P.name||'A HELLDIVER')+' IS DOWN — REINFORCING',3);
+    P.downAt=time;
+    if(isSquad()){
+      /* no self-service in a squad: you lie there until somebody calls you in */
+      P.waiting=0;
+      if(P===me){ SFX.siren(); say('YOU ARE DOWN — WAIT FOR A REINFORCEMENT',4); }
+      else say((P.name||'A HELLDIVER')+' IS DOWN — CALL THEM IN  ↑↓→←↑',4);
+    }else{
+      P.waiting=8;                    /* alone: pick a drop site before it is chosen for you */
+      if(P===me){ SFX.siren(); say('REINFORCING — CLICK A DROP SITE',3.5); }
+    }
     return;
   }
   /* budget spent: this one stays down, and the mission ends when the squad is gone */

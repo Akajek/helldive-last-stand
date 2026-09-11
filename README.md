@@ -58,14 +58,15 @@ Everyone lands in a shared lobby with a slot list, and the host picks the mode:
 - **GM vs PLAYERS** — one Game Master feeds the horde by hand against the squad.
 - **CO-OP** — everybody drops as Helldivers and the AI spawner runs the horde.
 
-Each player claims their own slot (**PLAY**, **WATCH**, or **TAKE GM**). Mission
-settings belong to the host alone; everyone else sees them greyed out and synced.
-The mission will not start without a sane roster — GM mode needs exactly one Game
-Master and at least one Helldiver, co-op needs at least one Helldiver.
+**Making the lobby is how you become the Game Master.** In GM mode the host holds the
+badge and cannot put it down, and nobody else can ask for it — switch the lobby to
+CO-OP if you would rather play. This is not politeness: the simulation lives on the
+host's machine and snapshots are culled around the squad, so an off-host GM would be
+looking at a map with holes in it.
 
-The Game Master has to be the host: the simulation lives on their machine, and
-snapshots are culled around the squad, so an off-host GM would be looking at a map
-with holes in it.
+Everyone else claims their own slot (**PLAY** or **WATCH**). Mission settings belong
+to the host alone; the rest see them greyed out and synced. The mission will not start
+without a sane roster — GM mode needs at least one Helldiver, and so does co-op.
 
 ## The two roles
 
@@ -96,9 +97,23 @@ within 380 units of any Helldiver, or inside a building — no spawn-camping. Th
 automatic horde spawner is switched off in a GM match: every enemy on the map is one
 you placed by hand.
 
-Reinforcements are a **squad budget**, not a personal one: every death anywhere in
-the squad spends one. When they run out, the next Helldiver to fall stays down, and
-the round ends once the last one is gone.
+## Dying, and getting back up
+
+Reinforcements are a **squad budget**, not a personal one: every death anywhere in the
+squad spends one. When they run out, the next Helldiver to fall stays down for good,
+and the round ends once the last one is gone.
+
+**On your own**, you pick your own drop site — click where you want to land, or dither
+and the ship picks for you.
+
+**In a squad, you do not redeploy yourself.** You lie there watching a squadmate's
+shoulder until one of them punches in the **REINFORCE** stratagem — `↑ ↓ → ← ↑` — and
+throws the beacon. Whoever has been waiting longest comes down at it, on their feet
+with a fresh kit. The call is refused, and costs nothing, if nobody is actually down.
+
+If the *whole* squad goes down at once there is nobody left to make the call, so the
+ship redeploys everyone automatically after six seconds rather than leaving you lying
+in the street. The stratagem does not appear at all in a solo game.
 
 ## Soundtrack
 
