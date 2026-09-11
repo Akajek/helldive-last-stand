@@ -109,6 +109,7 @@
       font-size:12px;letter-spacing:1px}
   /* inside the lobby it is a column, not a footnote */
   #lobbyscreen #cfgbox{margin-top:0;border-top:none;padding-top:0;max-width:none}
+  #lobbyscreen #cfgbox .mphead{display:none}   /* the column already has a heading */
   #cfgbox .mphead{opacity:.6;letter-spacing:3px;margin-bottom:4px}
   #cfgsum{opacity:.65;font-size:11px;margin-bottom:10px;line-height:1.6em;color:#c6a6ff}
   #cfgbox .vrow{margin:7px 0}
@@ -304,6 +305,12 @@
       <div class="vrow"><label>SQUAD SCALING</label>
         <input type="range" id="cfgsquad" min="0" max="200" step="10" value="100">
         <span class="val" id="cfgsquadv"></span></div>
+      <div class="vrow"><label>TEAM FIRE</label>
+        <input type="range" id="cfgffteam" min="0" max="100" step="10" value="0">
+        <span class="val" id="cfgffteamv"></span></div>
+      <div class="vrow"><label>SENTRY FIRE</label>
+        <input type="range" id="cfgffsentry" min="0" max="100" step="10" value="0">
+        <span class="val" id="cfgffsentryv"></span></div>
     </div>
 
     <div id="musicrow">
@@ -925,8 +932,11 @@ var camKick = {x:0,y:0};
 /* squad: how hard the co-op horde thickens per extra Helldiver. 1 = +35% each,
    0 = the swarm never notices you brought friends. Ignored in a GM match --
    there the Game Master IS the difficulty curve. */
+/* ffTeam: how much of a squadmate's round or blast lands on you. ffSentry: the
+   same for your own turrets. Both off by default. Neither touches what your OWN
+   ordnance does to you -- standing under your own 500KG is the deal you made. */
 var CFG={ramp:25, tough:1, income:1, incomeScale:1, lives:4, squad:1,
-         credits:26, maxCredits:160};
+         ffTeam:0, ffSentry:0, credits:26, maxCredits:160};
 var PRESETS={
   /* they never toughen -- the GM just gets richer and drowns you in bodies */
   swarm:{ramp:20, tough:0,   income:1.35, incomeScale:2.0, lives:4},
@@ -951,12 +961,16 @@ function cfgApplyUI(){
   el('cfgiscale').value=Math.round(CFG.incomeScale*100);
   el('cfglives').value=CFG.lives;
   el('cfgsquad').value=Math.round(CFG.squad*100);
+  el('cfgffteam').value=Math.round(CFG.ffTeam*100);
+  el('cfgffsentry').value=Math.round(CFG.ffSentry*100);
   el('cfgrampv').textContent=CFG.ramp>0?('every '+CFG.ramp+'s'):'OFF';
   el('cfgtoughv').textContent=CFG.tough>0?Math.round(CFG.tough*100)+'%':'NEVER';
   el('cfgincomev').textContent=Math.round(CFG.income*100)+'%';
   el('cfgiscalev').textContent=CFG.incomeScale>0?Math.round(CFG.incomeScale*100)+'%':'FLAT';
   el('cfglivesv').textContent=CFG.lives;
   el('cfgsquadv').textContent=CFG.squad>0?('+'+Math.round(CFG.squad*35)+'%/diver'):'OFF';
+  el('cfgffteamv').textContent=CFG.ffTeam>0?Math.round(CFG.ffTeam*100)+'%':'OFF';
+  el('cfgffsentryv').textContent=CFG.ffSentry>0?Math.round(CFG.ffSentry*100)+'%':'OFF';
   cfgSummary();
 }
 function cfgSummary(){
@@ -968,6 +982,11 @@ function cfgSummary(){
                           :'GM income stays flat.');
   t.push(CFG.squad>0?('In co-op the horde thickens '+Math.round(CFG.squad*35)+'% per extra Helldiver.')
                     :'In co-op the horde ignores squad size.');
+  t.push(CFG.ffTeam>0?('Squadmates hit each other for '+Math.round(CFG.ffTeam*100)+'%.')
+                     :'Squadmates cannot hurt each other.');
+  t.push(CFG.ffSentry>0?('Sentries hit their own side for '+Math.round(CFG.ffSentry*100)+'%.')
+                       :'Sentries never hit their own side.');
+  t.push('Your own ordnance always hurts you.');
   var e2=el('cfgsum'); if(e2) e2.textContent=t.join(' ');
 }
 function cfgRead(){
@@ -977,6 +996,8 @@ function cfgRead(){
   CFG.incomeScale=el('cfgiscale').value/100;
   CFG.lives=+el('cfglives').value;
   CFG.squad=el('cfgsquad').value/100;
+  CFG.ffTeam=el('cfgffteam').value/100;
+  CFG.ffSentry=el('cfgffsentry').value/100;
   cfgApplyUI(); cfgSave();
   if(NET.hosting) lobbyBroadcast();
 }
@@ -1300,7 +1321,8 @@ function fire(){
   var mx=player.x+Math.cos(ang)*20, my=player.y+Math.sin(ang)*20;
   bullets.push({nid:nid(),x:mx,y:my,px:mx,py:my,
     vx:Math.cos(ang)*w.speed,vy:Math.sin(ang)*w.speed,
-    life:w.life,dmg:w.dmg,color:w.color,size:w.size});
+    life:w.life,dmg:w.dmg,color:w.color,size:w.size,
+    src:'diver', who:player.id});
   if(player===me) shake=Math.max(shake,w.recoil);
   SFX.shot(w);
   /* teammates' guns have to be audible to the rest of the squad, and they are
@@ -1353,7 +1375,9 @@ function equip(id){
 }
 
 /* ============================ EXPLOSIONS ============================ */
-function explode(x,y,radius,dmg,shakeAmt,col,big){
+/* `owner` is the diver id that called this down, 'sentry' for a turret cooking off,
+   or nothing at all for the horde and the architecture -- which always hurt. */
+function explode(x,y,radius,dmg,shakeAmt,col,big,owner){
   /* an explosion the Helldiver cannot see should not be heard at full volume next
      to their ear -- anything beyond this simply is not sent */
   if(NET.role==='host'&&anchorDist(x,y)<2200)
@@ -1381,7 +1405,12 @@ function explode(x,y,radius,dmg,shakeAmt,col,big){
   var safe=radius*0.8;
   if(dmg>0) eachDiver(function(P){
     var pd=Math.hypot(P.x-x,P.y-y);
-    if(pd<safe) hurt(Math.min(95,dmg*0.12)*(1-pd/safe)+12,P);
+    if(pd>=safe) return;
+    var scale=1;
+    if(owner==='sentry') scale=CFG.ffSentry;
+    else if(typeof owner==='number'&&owner!==P.id) scale=CFG.ffTeam;
+    if(scale<=0) return;
+    hurt((Math.min(95,dmg*0.12)*(1-pd/safe)+12)*scale,P);
   });
   for(var k=0;k<70;k++){
     var aa=rand(0,TAU), sp=rand(60,radius*3.2);
@@ -1465,7 +1494,7 @@ function throwNade(){
   var NI=player.inp;
   var a=Math.atan2(NI.ay-player.y,NI.ax-player.x);
   var d=Math.min(430,Math.hypot(NI.ax-player.x,NI.ay-player.y));
-  nades.push({nid:nid(),sx:player.x,sy:player.y,x:player.x,y:player.y,
+  nades.push({nid:nid(),who:player.id,sx:player.x,sy:player.y,x:player.x,y:player.y,
     tx:player.x+Math.cos(a)*d,ty:player.y+Math.sin(a)*d,t:0,dur:0.5,z:0,fuse:1.5,spin:0});
   SFX.throwb();
 }
@@ -1563,7 +1592,7 @@ function throwStratagem(tx,ty){
   /* the ball is a physical object — it flies, bounces and rolls, and whatever it
      ends up next to is what gets the stratagem */
   var flight=clamp(d/560,0.45,1.05);
-  balls.push({nid:nid(),x:player.x,y:player.y,
+  balls.push({nid:nid(),who:player.id,x:player.x,y:player.y,
     vx:Math.cos(a)*d/flight, vy:Math.sin(a)*d/flight,
     z:16, vz:300*flight, spin:0, rest:0, beep:0, call:0,
     landed:false, strat:armed});
@@ -1611,7 +1640,8 @@ function callIn(b){
     blasts.push({x:x,y:y,r:0,max:1,t:0,life:1.6,marker:true,col:'#ff6b3d'});
     if(NET.role==='host') NET.mk.push(Math.round(x),Math.round(y));
     SFX.siren();
-    setTimeout(function(){ if(running) explode(x,y,270,900,26,'#ff6b3d',true); },1500);
+    var eagleWho=b.who;
+    setTimeout(function(){ if(running) explode(x,y,270,900,26,'#ff6b3d',true,eagleWho); },1500);
   }else if(s.id==='reinforce'){
     /* longest wait comes down first -- the squad does not get to play favourites */
     var first=null;
@@ -1723,7 +1753,7 @@ function podLand(p){
     pickups.push({kind:'bulletstorm',x:x,y:y,bob:rand(0,6)});
     puff(x,y,'#c6ff6b');
   }else if(k==='liberty'){
-    explode(x,y,240,260,24,'#ffffff',true);
+    explode(x,y,240,260,24,'#ffffff',true,b.who);
     for(var lb=0;lb<3;lb++){
       var la=rand(0,TAU);
       pickups.push({kind:'supply',x:x+Math.cos(la)*42,y:y+Math.sin(la)*42,bob:rand(0,6)});
@@ -1928,6 +1958,28 @@ function update(dt){
         hitOne=true; break;
       }
     }
+    /* A round only looks for a friendly body if the mission says it may, and never
+       for the Helldiver who fired it -- the muzzle sits inside their own hitbox. */
+    if(!hitOne&&b.src&&NET.role!=='client'){
+      var ffs=b.src==='sentry'?CFG.ffSentry:CFG.ffTeam;
+      if(ffs>0){
+        for(var fp=0;fp<players.length;fp++){
+          var FP=players[fp];
+          if(FP.inPod||FP.dead||FP.guard>0) continue;
+          if(b.src==='diver'&&FP.id===b.who) continue;
+          if(Math.abs(FP.x-b.x)>60||Math.abs(FP.y-b.y)>60) continue;
+          if(!segHit(b.px,b.py,b.x,b.y,FP.x,FP.y,FP.r)) continue;
+          hurt(b.dmg*ffs*(FP.stimT>0?0.6:1),FP);
+          for(var fq=0;fq<5;fq++){
+            var fa=Math.atan2(b.vy,b.vx)+rand(-0.9,0.9);
+            particles.push({x:FP.x,y:FP.y,vx:Math.cos(fa)*rand(50,240),vy:Math.sin(fa)*rand(50,240),
+              life:rand(0.15,0.45),max:0.45,c:'#c1121f',s:rand(2,4)});
+          }
+          SFX.hit();
+          hitOne=true; break;
+        }
+      }
+    }
     if(!hitOne&&MAP.city){
       var mxp=(b.x+b.px)/2, myp=(b.y+b.py)/2;
       if(damageCellAt(b.x,b.y,b.dmg*0.45,b.vx,b.vy)||damageCellAt(mxp,myp,b.dmg*0.45,b.vx,b.vy)){
@@ -2015,7 +2067,7 @@ function update(dt){
         for(var cs=sentries.length-1;cs>=0;cs--){
           var stg=sentries[cs];
           if(dist(en,stg)<en.r+30){
-            explode(stg.x,stg.y,120,80,13,'#9ecbff');
+            explode(stg.x,stg.y,120,80,13,'#9ecbff','sentry');
             sentries.splice(cs,1);
             say('SENTRY DESTROYED',1.6);
             en.slow=0;                      /* barely breaks stride */
@@ -2162,11 +2214,11 @@ function update(dt){
         var sa=st.ang+rand(-0.05,0.05);
         var smx=st.x+Math.cos(sa)*26, smy=st.y+Math.sin(sa)*26;
         bullets.push({nid:nid(),x:smx,y:smy,px:smx,py:smy,vx:Math.cos(sa)*1500,vy:Math.sin(sa)*1500,
-          life:0.75,dmg:12,color:'#bfe9ff',size:3});
+          life:0.75,dmg:12,color:'#bfe9ff',size:3,src:'sentry', who:-1});
       }
     }
     if(st.hp<=0){
-      explode(st.x,st.y,110,70,10,'#9ecbff');   /* killed -> cooks off */
+      explode(st.x,st.y,110,70,10,'#9ecbff','sentry');   /* killed -> cooks off */
       sentries.splice(s2,1);
     } else if(st.ammo<=0 && st.dying<=0){
       st.dying=1.1; SFX.dry();                  /* out of ammo -> powers down and goes */
@@ -2236,7 +2288,7 @@ function update(dt){
     gr.x=gr.sx+(gr.tx-gr.sx)*gk;
     gr.y=gr.sy+(gr.ty-gr.sy)*gk;
     gr.z=Math.sin(gk*Math.PI)*46;
-    if(gr.fuse<=0){ explode(gr.x,gr.y,150,180,14,'#ffb347'); nades.splice(g,1); }
+    if(gr.fuse<=0){ explode(gr.x,gr.y,150,180,14,'#ffb347',gr.who); nades.splice(g,1); }
   }
 
   /* fx */
@@ -4162,7 +4214,8 @@ el('joincode').addEventListener('keydown',function(e){
 });
 el('relayurl').addEventListener('keydown',function(e){ e.stopPropagation(); });
 el('newround').onclick=function(){ if(NET.role==='host'&&NET.peer) startGM(); };
-var cfgIn=['cfgramp','cfgtough','cfgincome','cfgiscale','cfglives','cfgsquad'];
+var cfgIn=['cfgramp','cfgtough','cfgincome','cfgiscale','cfglives','cfgsquad',
+           'cfgffteam','cfgffsentry'];
 for(var ci2=0;ci2<cfgIn.length;ci2++) el(cfgIn[ci2]).oninput=cfgRead;
 var presetBtns=document.querySelectorAll('[data-preset]');
 for(var pb=0;pb<presetBtns.length;pb++){

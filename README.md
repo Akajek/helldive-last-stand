@@ -187,3 +187,14 @@ their health, **GM INCOME** and **INCOME RAMPS** how fast the Game Master can sp
 **SQUAD SCALING** is co-op only: how much thicker the swarm gets per extra Helldiver
 (default +35% each, or turn it off so friends are pure upside). The four presets —
 SWARM, ELITE, BOTH, FLAT — are starting points, not limits.
+
+**Friendly fire** is two separate dials, both **off by default**:
+
+- **TEAM FIRE** — how much of a squadmate's round or blast lands on you.
+- **SENTRY FIRE** — the same for your own turrets, their gunfire and their cook-off.
+
+Neither one touches what your **own** ordnance does to you. Standing under your own
+500KG is the deal you made, and a frag at your feet is still a frag at your feet.
+A round never hits the Helldiver who fired it either. Hellpods still flatten whoever
+is underneath regardless — that is gravity, not friendly fire — and nothing the horde
+or a collapsing building does is affected by these at all.
