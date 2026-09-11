@@ -766,6 +766,7 @@ function reset(){
           cool:0, sprint:0, grenades:KIT.grenades, stims:KIT.stims,
           stimT:0, stimHeal:0, nadeCool:0, inPod:true, cape:[],
           kick:0, punch:0, waiting:0, down:false, guard:0, melee:0, meleeCd:0,
+          fxCool:0, fireLatch:false, sx:0, sy:0,
           lives:REINFORCEMENTS};
   camKick.x=0; camKick.y=0;
   bullets=[];enemies=[];pickups=[];sentries=[];balls=[];pods=[];blasts=[];
@@ -2675,7 +2676,12 @@ function clientSnap(m){
   time=m.tm/10; hordeLv=m.lv; kills=m.ki; nextRebuild=m.rb;
 
   var P=m.p;
-  player.x=P.x; player.y=P.y; player.ang=P.a/100;
+  player.sx=P.x; player.sy=P.y;
+  /* Only hard-set the position when we are not predicting, or when the host and we
+     have diverged so far that easing back would look worse than a jump. */
+  if(player.inPod||player.down||gameOver||Math.hypot(player.x-P.x,player.y-P.y)>120){
+    player.x=P.x; player.y=P.y;
+  }
   player.hp=P.hp; player.wep=P.w;
   player.arsenal[P.w].ammo=P.am; player.arsenal[P.w].mags=P.mg; player.arsenal[P.w].owned=true;
   player.arsenal.bulletstorm.owned=!!P.bo; player.arsenal.bulletstorm.ammo=P.ba;
@@ -2831,20 +2837,60 @@ function updateClient(dt){
     u.x+=u.vx*dt; u.y+=u.vy*dt; u.life-=dt;
     if(u.life<=0) bullets.splice(b,1);
   }
+  /* ---- local prediction -------------------------------------------------
+     Run the same movement maths the host runs, from this keyboard, so walking
+     responds instantly instead of after a round trip. The host stays the
+     authority: we ease toward its position every frame rather than obeying it
+     on arrival. */
+  if(!player.inPod&&!player.down&&!gameOver){
+    var pix=(keys['d']?1:0)-(keys['a']?1:0), piy=(keys['s']?1:0)-(keys['w']?1:0);
+    var pm=Math.hypot(pix,piy)||1; pix/=pm; piy/=pm;
+    var psprint=keys['shift']&&(pix||piy);
+    var pspd=(psprint?360:230)*(player.stimT>0?1.25:1);
+    player.vx+=(pix*pspd-player.vx)*Math.min(1,dt*12);
+    player.vy+=(piy*pspd-player.vy)*Math.min(1,dt*12);
+    player.x=clamp(player.x+player.vx*dt,-WORLD,WORLD);
+    player.y=clamp(player.y+player.vy*dt,-WORLD,WORLD);
+    resolveCircle(player,player.r);
+    player.x+=(player.sx-player.x)*Math.min(1,dt*3.5);
+    player.y+=(player.sy-player.y)*Math.min(1,dt*3.5);
+  } else { player.vx=0; player.vy=0; }
+
   mouse.wx=mouse.x-W/2+cam.x;
   mouse.wy=mouse.y-H/2+cam.y;
   if(!player.inPod) player.ang=Math.atan2(mouse.wy-player.y,mouse.wx-player.x);
+
+  /* Instant muzzle feedback. The bullet itself is the host's to create -- this is
+     only the flash, report and recoil, so the gun does not feel like it fires late. */
+  player.fxCool-=dt;
+  if(mouse.down&&!player.inPod&&!player.down&&!gameOver&&player.reloading<=0&&player.fxCool<=0){
+    var fw=W_(), fa=A_();
+    if(fa&&fa.ammo>0&&(fw.auto||!player.fireLatch)){
+      player.fxCool=60/fw.rpm;
+      player.fireLatch=true;
+      SFX.shot(fw);
+      player.kick=clamp(player.kick+(Math.random()<0.5?-1:1)*fw.kick*rand(0.5,1.5),
+                        -fw.kickMax,fw.kickMax);
+      player.punch=fw.punch;
+      var fang=player.ang+player.kick;
+      var fmx=player.x+Math.cos(fang)*20, fmy=player.y+Math.sin(fang)*20;
+      for(var fq=0;fq<2;fq++)
+        particles.push({x:fmx,y:fmy,
+          vx:Math.cos(fang)*rand(60,260)+rand(-70,70),
+          vy:Math.sin(fang)*rand(60,260)+rand(-70,70),
+          life:rand(0.05,0.14),max:0.14,c:'#ffe9a8',s:2});
+    }
+  }
+  if(!mouse.down) player.fireLatch=false;
   var lean=player.down?0.6:0.16;
   var ctx2=player.x+(mouse.wx-player.x)*lean, cty=player.y+(mouse.wy-player.y)*lean;
   if(player.inPod&&pods.length){ ctx2=pods[0].x; cty=pods[0].y; }
   cam.x+=(ctx2-cam.x)*Math.min(1,dt*6);
   cam.y+=(cty-cam.y)*Math.min(1,dt*6);
-  player.vx=(player.x-(player.px||player.x))/Math.max(dt,0.001);
-  player.vy=(player.y-(player.py||player.y))/Math.max(dt,0.001);
-  player.px=player.x; player.py=player.y;
   capeUpdate(dt);
   if(player.melee>0) player.melee-=dt;
   player.kick-=player.kick*Math.min(1,dt*9);
+  player.punch-=player.punch*Math.min(1,dt*14);
   for(var c=0;c<buildings.length;c++)
     if(buildings[c].collapse>0) buildings[c].collapse=Math.max(0,buildings[c].collapse-dt);
   for(var p=particles.length-1;p>=0;p--){

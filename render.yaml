@@ -3,6 +3,12 @@ services:
     name: helldive-last-stand
     runtime: node
     plan: free
+    # Put the relay near the PLAYERS. Every packet goes player -> relay -> host and
+    # back, so a relay on the wrong continent doubles into a few hundred ms of ping.
+    # Options: frankfurt, oregon, ohio, virginia, singapore.
+    # NOTE: Render cannot move an existing service between regions -- changing this
+    # means deleting the service and applying the blueprint again.
+    region: frankfurt
     buildCommand: npm install
     startCommand: node server.js
     envVars:
