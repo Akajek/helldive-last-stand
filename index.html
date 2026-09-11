@@ -661,9 +661,9 @@ function updateCollapses(dt){
         var en=enemies[e];
         if(en.x>b.x-10&&en.x<b.x+b.w+10&&en.y>b.y-10&&en.y<b.y+b.h+10) en.hp=-1;
       }
-      if(!player.inPod&&!gameOver&&
-         player.x>b.x-10&&player.x<b.x+b.w+10&&player.y>b.y-10&&player.y<b.y+b.h+10)
-        hurt(120);
+      if(!gameOver) eachDiver(function(P){
+        if(P.x>b.x-10&&P.x<b.x+b.w+10&&P.y>b.y-10&&P.y<b.y+b.h+10) hurt(120,P);
+      });
       blasts.push({x:b.x+b.w/2,y:b.y+b.h/2,r:0,max:Math.max(b.w,b.h)*0.8,t:0,life:0.7,col:'#6a6f7e'});
       shake=Math.max(shake,16);
       SFX.crumble();
@@ -681,7 +681,9 @@ function cellFree(cx,cy){
     return Math.hypot(o.x-nx,o.y-ny)>r;
   }
   /* never wall the Helldiver in, and never swallow their kit */
-  if(!player.inPod&&!gameOver&&!clear(player,player.r+12)) return false;
+  var blocked=false;
+  eachDiver(function(P){ if(!clear(P,P.r+12)) blocked=true; });
+  if(blocked) return false;
   for(var i=0;i<sentries.length;i++) if(!clear(sentries[i],26)) return false;
   for(var j=0;j<pickups.length;j++) if(!clear(pickups[j],22)) return false;
   for(var k=0;k<pods.length;k++)    if(!clear(pods[k],44)) return false;
@@ -893,6 +895,35 @@ var armed=null, typed=[], codeActive=false;
 
 /* ============================ STATE ============================ */
 var player,bullets,enemies,pickups,sentries,balls,pods,blasts,particles,corpses,nades,junk;
+/* The diver roster. `me` is the one this browser drives (null if I am the GM);
+   `player` stays a live alias for it so every HUD, camera and input site keeps
+   working untouched. World code that must consider everyone uses these helpers. */
+var players=[], me=null;
+function nearestDiver(x,y){
+  var best=null, bd=Infinity;
+  for(var i=0;i<players.length;i++){
+    var P=players[i];
+    if(P.inPod||P.dead) continue;
+    var d=Math.hypot(P.x-x,P.y-y);
+    if(d<bd){ bd=d; best=P; }
+  }
+  return best?{p:best,d:bd}:null;
+}
+function diverDist(x,y){ var n=nearestDiver(x,y); return n?n.d:Infinity; }
+function diverById(id){
+  for(var i=0;i<players.length;i++) if(players[i].id===id) return players[i];
+  return null;
+}
+/* Reinforcements are a squad budget, not a personal one -- the way it should be. */
+var livesLeft=4;
+/* live divers only -- a body waiting on reinforcement is not a target */
+function eachDiver(fn){
+  for(var i=0;i<players.length;i++){
+    var P=players[i];
+    if(P.inPod||P.dead) continue;
+    fn(P);
+  }
+}
 var time,kills,spawnAcc,running=false,shake,hordeLv,gameOver;
 var paused=false;
 
@@ -913,7 +944,9 @@ function reset(){
           stimT:0, stimHeal:0, nadeCool:0, inPod:true, cape:[],
           kick:0, punch:0, waiting:0, down:false, guard:0, melee:0, meleeCd:0,
           fxCool:0, fireLatch:false, sx:0, sy:0,
-          lives:CFG.lives};
+          id:0, name:'HELLDIVER', dead:false, lives:CFG.lives};
+  players=[player]; me=player;
+  livesLeft=CFG.lives;
   camKick.x=0; camKick.y=0;
   bullets=[];enemies=[];pickups=[];sentries=[];balls=[];pods=[];blasts=[];
   particles=[];corpses=[];nades=[];junk=[];
@@ -926,15 +959,16 @@ function reset(){
   /* in a GM match every last enemy is placed by hand, so no opening horde */
   if(NET.role==='solo') for(var j=0;j<45;j++) spawnEnemy('voteless',true);
   /* every dive starts the only way it can: strapped into a hellpod */
-  if(NET.role!=='client') dropPod(0,0,{kind:'player'});
+  if(NET.role!=='client') dropPod(0,0,{kind:'player',pid:player.id});
 }
 
 /* ---- cape: a little verlet rope pinned to the Helldiver's shoulders ---- */
 var CAPE_N=8, CAPE_SEG=5.2;
-function capeInit(){
-  player.cape=[];
+function capeInit(who){
+  var P=who||player;
+  P.cape=[];
   for(var i=0;i<CAPE_N;i++)
-    player.cape.push({x:player.x-i*CAPE_SEG, y:player.y, ox:player.x-i*CAPE_SEG, oy:player.y});
+    P.cape.push({x:P.x-i*CAPE_SEG, y:P.y, ox:P.x-i*CAPE_SEG, oy:P.y});
 }
 function capeUpdate(dt){
   var c=player.cape;
@@ -963,8 +997,8 @@ function capeUpdate(dt){
     }
   }
 }
-function capeBlast(x,y,power){
-  var c=player.cape;
+function capeBlast(x,y,power,who){
+  var c=(who||player).cape;
   for(var i=1;i<c.length;i++){
     var dx=c[i].x-x, dy=c[i].y-y, d=Math.hypot(dx,dy)||1;
     var f=power*(i/c.length)/Math.max(40,d);
@@ -980,11 +1014,12 @@ function spawnEnemy(type,anywhere,atx,aty){
   var x,y;
   if(atx!==undefined){ x=atx; y=aty; }
   else if(anywhere){
-    do{ x=rand(-WORLD,WORLD); y=rand(-WORLD,WORLD); }while(Math.hypot(x-player.x,y-player.y)<650);
+    do{ x=rand(-WORLD,WORLD); y=rand(-WORLD,WORLD); }while(diverDist(x,y)<650);
   }else{
     var a=rand(0,TAU), d=Math.max(W,H)*0.62+rand(60,280);
-    x=clamp(player.x+Math.cos(a)*d,-WORLD,WORLD);
-    y=clamp(player.y+Math.sin(a)*d,-WORLD,WORLD);
+    var anchor=players.length?players[(Math.random()*players.length)|0]:{x:0,y:0};
+    x=clamp(anchor.x+Math.cos(a)*d,-WORLD,WORLD);
+    y=clamp(anchor.y+Math.sin(a)*d,-WORLD,WORLD);
   }
   var spot=freeSpot(x,y,type==='flesh'?34:13);
   x=clamp(spot.x,-WORLD,WORLD); y=clamp(spot.y,-WORLD,WORLD);
@@ -1085,7 +1120,7 @@ function equip(id){
 function explode(x,y,radius,dmg,shakeAmt,col,big){
   /* an explosion the Helldiver cannot see should not be heard at full volume next
      to their ear -- anything beyond this simply is not sent */
-  if(NET.role==='host'&&Math.hypot(x-player.x,y-player.y)<2200)
+  if(NET.role==='host'&&diverDist(x,y)<2200)
     NET.fx.push([Math.round(x),Math.round(y),Math.round(radius),
                  col||'#ffb347',big?1:0,Math.round(shakeAmt)]);
   blasts.push({x:x,y:y,r:0,max:radius,t:0,life:0.6,col:col||'#ffb347'});
@@ -1107,8 +1142,11 @@ function explode(x,y,radius,dmg,shakeAmt,col,big){
   for(var s=0;s<sentries.length;s++){
     if(dist(sentries[s],{x:x,y:y})<radius) sentries[s].hp-=dmg*0.4;
   }
-  var pd=Math.hypot(player.x-x,player.y-y), safe=radius*0.8;
-  if(pd<safe&&dmg>0&&!player.inPod) hurt(Math.min(95,dmg*0.12)*(1-pd/safe)+12);
+  var safe=radius*0.8;
+  if(dmg>0) eachDiver(function(P){
+    var pd=Math.hypot(P.x-x,P.y-y);
+    if(pd<safe) hurt(Math.min(95,dmg*0.12)*(1-pd/safe)+12,P);
+  });
   for(var k=0;k<70;k++){
     var aa=rand(0,TAU), sp=rand(60,radius*3.2);
     particles.push({x:x,y:y,vx:Math.cos(aa)*sp,vy:Math.sin(aa)*sp,
@@ -1117,15 +1155,16 @@ function explode(x,y,radius,dmg,shakeAmt,col,big){
 }
 
 var flashEl=null, stimEl=null;
-function hurt(d){
-  if(gameOver||player.guard>0) return;
-  player.hp-=d;
+function hurt(d,who){
+  var P=who||player;
+  if(gameOver||P.guard>0||P.dead) return;
+  P.hp-=d;
   SFX.hurt();
   /* the GM is not the one being hit, so no red screen for them -- it goes to the
      Helldiver instead, who is the only one who should feel it */
-  if(NET.role==='host') NET.pf.push(['h',Math.round(d)]);
-  else playerHitFx(d);
-  if(player.hp<=0) die();
+  if(NET.role==='host') NET.pf.push(['h',Math.round(d),P.id]);
+  else if(P===me) playerHitFx(d);
+  if(P.hp<=0) die(P);
 }
 /* screen feedback for the person actually wearing the armour */
 function playerHitFx(d){
@@ -1334,11 +1373,12 @@ function callIn(b){
   }
 }
 
-function reinforceAt(x,y){
-  if(!player.down) return;
-  player.down=false; player.waiting=0;
+function reinforceAt(x,y,who){
+  var P=who||me||player;
+  if(!P||!P.down) return;
+  P.down=false; P.waiting=0;
   var spot=freeSpot(clamp(x,-WORLD+40,WORLD-40),clamp(y,-WORLD+40,WORLD-40),22);
-  dropPod(spot.x,spot.y,{kind:'player',fresh:true});
+  dropPod(spot.x,spot.y,{kind:'player',fresh:true,pid:P.id});
   say('REINFORCEMENT INBOUND',2.5);
 }
 
@@ -1357,18 +1397,18 @@ function podLand(p){
   SFX.impact();
   capeBlast(x,y,90);
   /* a pod does not care whose head it lands on */
-  if(k!=='player'&&!player.inPod&&!gameOver){
-    var ppd=Math.hypot(player.x-x,player.y-y);
+  if(k!=='player'&&!gameOver) eachDiver(function(P){
+    var ppd=Math.hypot(P.x-x,P.y-y);
     if(ppd<46){
       SFX.crush();
-      hurt(999);                                  /* flattened outright */
+      hurt(999,P);                                /* flattened outright */
     }else if(ppd<190){
       var fall=1-(ppd-46)/144;
-      hurt((player.stimT>0?26:42)*fall+6);
-      var ka=Math.atan2(player.y-y,player.x-x);
-      player.vx+=Math.cos(ka)*720*fall; player.vy+=Math.sin(ka)*720*fall;
+      hurt((P.stimT>0?26:42)*fall+6,P);
+      var ka=Math.atan2(P.y-y,P.x-x);
+      P.vx+=Math.cos(ka)*720*fall; P.vy+=Math.sin(ka)*720*fall;
     }
-  }
+  });
   /* anything under a pod at terminal velocity is simply gone, and everything in the
      shockwave is thrown clear and left reeling -- you land in an empty circle */
   for(var i=enemies.length-1;i>=0;i--){
@@ -1394,17 +1434,18 @@ function podLand(p){
   corpses.push({x:x,y:y,a:rand(0,TAU),life:14});
 
   if(k==='player'){
-    player.x=x; player.y=y; player.vx=0; player.vy=0;
-    player.inPod=false;
-    player.guard=2.0;                    /* shake it off before anything can touch you */
-    capeInit();
+    var P=diverById(p.payload.pid)||me||player;
+    P.x=x; P.y=y; P.vx=0; P.vy=0;
+    P.inPod=false;
+    P.guard=2.0;                         /* shake it off before anything can touch you */
+    capeInit(P);
     if(p.payload.fresh){                 /* redeployed: new kit, same stratagem cooldowns */
-      player.hp=player.maxhp;
-      player.arsenal.ar=freshArsenal().ar;
-      player.arsenal.pistol=freshArsenal().pistol;
-      player.wep='ar'; player.reloading=0; player.kick=0;
-      player.grenades=KIT.grenades; player.stims=KIT.stims;
-      player.stimT=0; player.stimHeal=0;
+      P.hp=P.maxhp;
+      P.arsenal.ar=freshArsenal().ar;
+      P.arsenal.pistol=freshArsenal().pistol;
+      P.wep='ar'; P.reloading=0; P.kick=0;
+      P.grenades=KIT.grenades; P.stims=KIT.stims;
+      P.stimT=0; P.stimHeal=0;
     }
   }else if(k==='sentry'){
     sentries.push({x:x,y:y,hp:220,max:220,ang:0,cool:0,ammo:320,maxAmmo:320,warm:1.5,dying:0});
@@ -1567,11 +1608,16 @@ function update(dt){
   for(var q=enemies.length-1;q>=0;q--){
     var en=enemies[q];
     en.t+=dt; en.hit-=dt; en.atk-=dt; en.stun-=dt;
-    var tx=player.x, ty=player.y, best=dist(en,player), onPlayer=true;
+    /* hunt whichever diver is closest, unless a sentry is closer still */
+    var nd=nearestDiver(en.x,en.y);
+    var tgtP=nd?nd.p:null;
+    var tx=tgtP?tgtP.x:en.x, ty=tgtP?tgtP.y:en.y;
+    var best=nd?nd.d:Infinity, onPlayer=!!tgtP;
     for(var t2=0;t2<sentries.length;t2++){
       var d2=dist(en,sentries[t2]);
       if(d2<best*0.7){ tx=sentries[t2].x; ty=sentries[t2].y; best=d2; onPlayer=false; }
     }
+    if(!tgtP&&!sentries.length){ tx=en.x+Math.cos(en.wob)*100; ty=en.y+Math.sin(en.wob)*100; }
     var flesh=en.type==='flesh';
     var wobble=flesh?0.12:0.28;
     var ang=Math.atan2(ty-en.y,tx-en.x)+Math.sin(en.t*(flesh?1.4:3.1)+en.wob)*wobble;
@@ -1617,15 +1663,16 @@ function update(dt){
         en.rec-=dt;                                  /* winded after a charge */
       } else if(en.chg>0){
         en.chg-=dt;
-        if(dist(en,player)<en.r+player.r+8&&!player.inPod&&en.atk<=0){
-          hurt(player.stimT>0?26:40);
-          var cga=Math.atan2(player.y-en.y,player.x-en.x);
-          player.vx+=Math.cos(cga)*900; player.vy+=Math.sin(cga)*900;
-          capeBlast(en.x,en.y,110);
+        eachDiver(function(P){
+          if(en.atk>0||dist(en,P)>=en.r+P.r+8) return;
+          hurt(P.stimT>0?26:40,P);
+          var cga=Math.atan2(P.y-en.y,P.x-en.x);
+          P.vx+=Math.cos(cga)*900; P.vy+=Math.sin(cga)*900;
+          capeBlast(en.x,en.y,110,P);
           shake=Math.max(shake,13);
           SFX.slam();
           en.atk=1.2; en.chg=0; en.rec=1.3;
-        }
+        });
         /* a charging mound does not trade with a turret, it goes straight over it */
         for(var cs=sentries.length-1;cs>=0;cs--){
           var stg=sentries[cs];
@@ -1660,12 +1707,13 @@ function update(dt){
       } else if(en.wind>0){
         en.wind-=dt;
         if(en.wind<=0){                       /* the slam lands */
-          if(dist(en,player)<en.r+player.r+26&&!player.inPod){
-            hurt(player.stimT>0?20:34);
-            var sa2=Math.atan2(player.y-en.y,player.x-en.x);
-            player.vx+=Math.cos(sa2)*640; player.vy+=Math.sin(sa2)*640;
-            capeBlast(en.x,en.y,70);
-          }
+          eachDiver(function(P){
+            if(dist(en,P)>=en.r+P.r+26) return;
+            hurt(P.stimT>0?20:34,P);
+            var sa2=Math.atan2(P.y-en.y,P.x-en.x);
+            P.vx+=Math.cos(sa2)*640; P.vy+=Math.sin(sa2)*640;
+            capeBlast(en.x,en.y,70,P);
+          });
           for(var t4=0;t4<sentries.length;t4++)
             if(dist(en,sentries[t4])<en.r+40) sentries[t4].hp-=70;
           if(MAP.city) damageArea(en.x,en.y,108,330);
@@ -1679,18 +1727,18 @@ function update(dt){
           }
           en.atk=1.6;
         }
-      } else if(en.stun<=0&&onPlayer&&!player.inPod){
+      } else if(en.stun<=0&&onPlayer&&tgtP){
         if(best<en.r+player.r+34&&en.atk<=0){
           en.wind=0.75; SFX.roar();
         } else if(en.chgCd<=0&&best>210&&best<900){
           en.cw=0.9; en.chgCd=rand(8,13); SFX.roar();
         }
       }
-    } else if(onPlayer&&best<en.r+player.r+4&&en.atk<=0&&en.stun<=0&&!player.inPod){
+    } else if(onPlayer&&tgtP&&best<en.r+tgtP.r+4&&en.atk<=0&&en.stun<=0){
       en.atk=0.85;
-      hurt(player.stimT>0?5:9);
-      var pa=Math.atan2(player.y-en.y,player.x-en.x);
-      player.vx+=Math.cos(pa)*170; player.vy+=Math.sin(pa)*170;
+      hurt(tgtP.stimT>0?5:9,tgtP);
+      var pa=Math.atan2(tgtP.y-en.y,tgtP.x-en.x);
+      tgtP.vx+=Math.cos(pa)*170; tgtP.vy+=Math.sin(pa)*170;
       shake=Math.max(shake,6);
     }
     for(var t3=0;t3<sentries.length;t3++){
@@ -1701,7 +1749,7 @@ function update(dt){
 
     if(en.hp<=0){
       kills++;
-      if(NET.role==='host'&&Math.abs(en.x-player.x)<1500&&Math.abs(en.y-player.y)<1500)
+      if(NET.role==='host'&&diverDist(en.x,en.y)<1500)
         NET.kl.push(Math.round(en.x),Math.round(en.y),flesh?1:0);
       if(flesh){
         SFX.burst();
@@ -2499,8 +2547,8 @@ function hud(){
       (ar.bulletstorm.owned?WEAPONS.bulletstorm.name+' ('+ar.bulletstorm.ammo+' rds, disposable)'
                            :'— no support weapon')+'</span>'+
     '<br><b>G</b> FRAG ×'+player.grenades+'   <b>Q</b> STIM ×'+player.stims+
-    '<br>REINFORCEMENTS <b>'+(new Array(player.lives+1).join('●')+
-      new Array(REINFORCEMENTS-player.lives+1).join('○'))+'</b>';
+    '<br>REINFORCEMENTS <b>'+(new Array(Math.max(0,livesLeft)+1).join('●')+
+      new Array(Math.max(0,CFG.lives-livesLeft)+1).join('○'))+'</b>';
 
   for(var s=0;s<STRATS.length;s++){
     var t=STRATS[s], chip=el('chip_'+t.id), ready=t.timer<=0;
@@ -2731,7 +2779,7 @@ function netSnapshot(){
   var snap={t:'snap', tm:Math.round(time*10), lv:hordeLv, ki:kills, rb:Math.round(nextRebuild),
     p:{x:R(player.x), y:R(player.y), a:Math.round(player.ang*100),
        hp:Math.round(player.hp), w:player.wep, am:A.ammo, mg:A.mags,
-       gr:player.grenades, sm:player.stims, lv:player.lives,
+       gr:player.grenades, sm:player.stims, lv:livesLeft,
        rl:Math.round(player.reloading*100), gd:Math.round(player.guard*100),
        ki:Math.round(player.kick*1000), wt:Math.round(player.waiting*10),
        dn:player.down?1:0, ip:player.inPod?1:0, st:Math.round(player.stimT*10),
@@ -2775,7 +2823,7 @@ function gmTrySpawn(){
   var u=GM_UNITS[GM.sel];
   if(GM.credits<u.cost) return;
   var x=mouse.wx, y=mouse.wy;
-  if(Math.hypot(x-player.x,y-player.y)<GM_MIN_RANGE) return;
+  if(diverDist(x,y)<GM_MIN_RANGE) return;
   if(Math.abs(x)>WORLD-40||Math.abs(y)>WORLD-40) return;
   if(MAP.city&&pointInWall(x,y)) return;
   GM.credits-=u.cost; GM.cool=u.cost>4?0.45:0.09; GM.spent+=u.cost; GM.sent++;
@@ -2790,10 +2838,12 @@ function gmClick(){ gmTrySpawn(); }
 function drawGM(){
   /* the Helldiver's protected bubble -- nothing may be spawned inside it */
   ctx.strokeStyle='rgba(255,210,30,.20)'; ctx.lineWidth=2; ctx.setLineDash([10,12]);
-  ctx.beginPath(); ctx.arc(player.x,player.y,GM_MIN_RANGE,0,TAU); ctx.stroke();
+  eachDiver(function(P){
+    ctx.beginPath(); ctx.arc(P.x,P.y,GM_MIN_RANGE,0,TAU); ctx.stroke();
+  });
   ctx.setLineDash([]);
   var u=GM_UNITS[GM.sel], ok=GM.credits>=u.cost&&
-      Math.hypot(mouse.wx-player.x,mouse.wy-player.y)>=GM_MIN_RANGE&&
+      diverDist(mouse.wx,mouse.wy)>=GM_MIN_RANGE&&
       !(MAP.city&&pointInWall(mouse.wx,mouse.wy));
   ctx.strokeStyle=ok?'rgba(180,90,214,.85)':'rgba(255,80,60,.6)';
   ctx.lineWidth=2;
@@ -2876,7 +2926,7 @@ function clientSnap(m){
   player.hp=P.hp; player.wep=P.w;
   player.arsenal[P.w].ammo=P.am; player.arsenal[P.w].mags=P.mg; player.arsenal[P.w].owned=true;
   player.arsenal.bulletstorm.owned=!!P.bo; player.arsenal.bulletstorm.ammo=P.ba;
-  player.grenades=P.gr; player.stims=P.sm; player.lives=P.lv;
+  player.grenades=P.gr; player.stims=P.sm; player.lives=P.lv; livesLeft=P.lv;
   player.reloading=P.rl/100; player.guard=P.gd/100; player.kick=P.ki/1000;
   player.waiting=P.wt/10; player.down=!!P.dn; player.inPod=!!P.ip;
   player.stimT=P.st/10;
@@ -2959,7 +3009,8 @@ function clientSnap(m){
     SFX.siren();
   }
   if(m.pf) for(var v2=0;v2<m.pf.length;v2++){
-    if(m.pf[v2][0]==='h') playerHitFx(m.pf[v2][1]);
+    if(m.pf[v2][0]==='h'&&(m.pf[v2][2]===undefined||!me||m.pf[v2][2]===me.id))
+      playerHitFx(m.pf[v2][1]);
     else if(m.pf[v2][0]==='s'){ stimFx(); SFX.stim(); }
   }
   if(m.fx) for(var f2=0;f2<m.fx.length;f2++){
@@ -3201,27 +3252,33 @@ function frame(t){
 requestAnimationFrame(frame);
 
 /* a death is only final once the reinforcement budget is spent */
-function die(){
-  if(gameOver||player.waiting) return;
-  mouse.down=false; armed=null;
+function die(who){
+  var P=who||player;
+  if(gameOver||P.down||P.dead) return;
+  if(P===me){ mouse.down=false; armed=null; }
   sfxBudget=8;
-  explode(player.x,player.y,130,0,18,'#c1121f');
+  explode(P.x,P.y,130,0,18,'#c1121f');
   /* the support weapon stays where you fell, with whatever was left in it */
-  var bs=player.arsenal.bulletstorm;
+  var bs=P.arsenal.bulletstorm;
   if(bs.owned&&bs.ammo>0)
-    pickups.push({kind:'bulletstorm',x:player.x+rand(-20,20),y:player.y+rand(-20,20),
+    pickups.push({kind:'bulletstorm',x:P.x+rand(-20,20),y:P.y+rand(-20,20),
       bob:rand(0,6),ammo:bs.ammo});
   bs.owned=false; bs.ammo=0;
-  if(player.lives>0){
-    player.lives--;
-    player.down=true;
-    player.waiting=8;                 /* time to pick a drop site before it is chosen for you */
-    player.inPod=true;
-    player.hp=1;
-    SFX.siren();
-    say('REINFORCING — CLICK A DROP SITE',3.5);
+  if(livesLeft>0){
+    livesLeft--;
+    P.down=true;
+    P.waiting=8;                      /* time to pick a drop site before it is chosen for you */
+    P.inPod=true;
+    P.hp=1;
+    if(P===me){ SFX.siren(); say('REINFORCING — CLICK A DROP SITE',3.5); }
+    else say((P.name||'A HELLDIVER')+' IS DOWN — REINFORCING',3);
     return;
   }
+  /* budget spent: this one stays down, and the mission ends when the squad is gone */
+  P.dead=true; P.inPod=true; P.hp=0;
+  var anyLeft=false;
+  for(var i=0;i<players.length;i++) if(!players[i].dead) anyLeft=true;
+  if(anyLeft){ say((P.name||'A HELLDIVER')+' IS LOST',3); return; }
   gameOver=true; running=false;
   SFX.boom(true);
   if(NET.role==='host')
@@ -3238,7 +3295,7 @@ function die(){
   } else {
     el('ovbody').innerHTML='You held out for <b>'+
       Math.floor(time/60)+'m '+Math.floor(time%60)+'s</b> on <b>'+MAP.name+'</b> and eliminated <b>'+
-      kills+'</b> of them.<br>All <b>'+REINFORCEMENTS+'</b> reinforcements expended — '+
+      kills+'</b> of them.<br>All <b>'+CFG.lives+'</b> reinforcements expended — '+
       'the squad has been wiped.<br><br>Pick a drop site to redeploy.';
   }
   el('overlay').style.display='flex';
