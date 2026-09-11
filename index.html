@@ -140,7 +140,7 @@
 
   <div class="hud" id="gmpanel">
     <h4>GAME MASTER</h4>
-    <div>CREDITS <b id="gmcnum">0</b></div>
+    <div>CREDITS <b id="gmcnum">0</b> <span id="gmrate" style="opacity:.7"></span></div>
     <div id="gmcredits"><i style="width:0%"></i></div>
     <div id="gmpal"></div>
     <div id="gmhint">WASD pan &middot; SHIFT fast &middot; SPACE centre on Helldiver<br>
@@ -1025,12 +1025,16 @@ function fire(){
   var ang=player.ang+player.kick+rand(-w.spread,w.spread)+(player.sprint?rand(-0.03,0.03):0);
   player.kick=clamp(player.kick+(Math.random()<0.5?-1:1)*w.kick*rand(0.5,1.5),-w.kickMax,w.kickMax);
   player.punch=w.punch;
-  camKick.x-=Math.cos(ang)*w.punch*1.5;
-  camKick.y-=Math.sin(ang)*w.punch*1.5;
+  /* the host is the GM watching from a drone camera -- someone else's rifle must
+     not kick their view around */
+  if(NET.role!=='host'){
+    camKick.x-=Math.cos(ang)*w.punch*1.5;
+    camKick.y-=Math.sin(ang)*w.punch*1.5;
+  }
   var mx=player.x+Math.cos(ang)*20, my=player.y+Math.sin(ang)*20;
   bullets.push({x:mx,y:my,px:mx,py:my,vx:Math.cos(ang)*w.speed,vy:Math.sin(ang)*w.speed,
     life:w.life,dmg:w.dmg,color:w.color,size:w.size});
-  shake=Math.max(shake,w.recoil);
+  if(NET.role!=='host') shake=Math.max(shake,w.recoil);
   SFX.shot(w);
   for(var i=0;i<2;i++) particles.push({x:mx,y:my,
     vx:Math.cos(ang)*rand(60,260)+rand(-70,70),vy:Math.sin(ang)*rand(60,260)+rand(-70,70),
@@ -1308,7 +1312,10 @@ function resupplyPlayer(){
 function callIn(b){
   var s=b.strat, x=b.x, y=b.y;
   if(s.id==='eagle'){
+    /* the target ring and the siren are most of the 500KG -- they were staying on
+       the host, so the Helldiver only ever got the bang with no warning */
     blasts.push({x:x,y:y,r:0,max:1,t:0,life:1.6,marker:true,col:'#ff6b3d'});
+    if(NET.role==='host') NET.mk.push(Math.round(x),Math.round(y));
     SFX.siren();
     setTimeout(function(){ if(running) explode(x,y,270,900,26,'#ff6b3d',true); },1500);
   }else if(s.id==='liberty'){
@@ -2458,6 +2465,8 @@ function hud(){
            GM_UNITS[g2].name+' <b>'+GM_UNITS[g2].cost+'</b></span>';
     var gp=el('gmpal'); if(gp.innerHTML!==pal) gp.innerHTML=pal;
     el('gmcnum').textContent=Math.floor(GM.credits);
+    var perSec=GM.rate*CFG.income*(1+hordeLv*0.06*CFG.incomeScale);
+    el('gmrate').textContent='(+'+perSec.toFixed(1)+'/s)';
     el('gmcredits').firstChild.style.width=(100*GM.credits/GM.max)+'%';
   }
   el('subline').textContent='KILLS '+kills+'  ·  HORDE LV '+hordeLv+
@@ -2517,7 +2526,7 @@ function hud(){
    sends input and receives snapshots. Nothing here runs in solo play. */
 var NET={role:'solo', ws:null, room:'', status:'', note:'', peer:false,
          acc:0, rate:1/12, inAcc:0, inRate:1/20, actions:[],
-         ck:[], ca:[], fx:[], kl:[], sn:[], pf:[], ping:0, pingAt:0, pingSeq:0,
+         ck:[], ca:[], fx:[], kl:[], sn:[], pf:[], mk:[], ping:0, pingAt:0, pingSeq:0,
          seen:{}, lastSnap:0, snapGap:0.083, mapId:'megacity'};
 var GM={cx:0, cy:0, credits:26, max:160, rate:2.6, sel:0, cool:0, spent:0, sent:0};
 var GM_UNITS=[{id:'voteless', name:'VOTELESS', cost:1},
@@ -2735,6 +2744,7 @@ function netSnapshot(){
   if(NET.kl.length){ snap.kl=NET.kl; NET.kl=[]; }
   if(NET.sn.length){ snap.sn=NET.sn; NET.sn=[]; }
   if(NET.pf.length){ snap.pf=NET.pf; NET.pf=[]; }
+  if(NET.mk.length){ snap.mk=NET.mk; NET.mk=[]; }
   if(paused) snap.pz=1;
   if(armed) snap.ar=armed.id;
   netSend(snap);
@@ -2943,6 +2953,10 @@ function clientSnap(m){
         hp:CELLHP,max:CELLHP,win:(wv>>1)&3,unit:(wv&1)===1,fresh:time+0.8};
       B2.alive++; B2.dead=false;
     }
+  }
+  if(m.mk) for(var mk2=0;mk2<m.mk.length;mk2+=2){
+    blasts.push({x:m.mk[mk2],y:m.mk[mk2+1],r:0,max:1,t:0,life:1.6,marker:true,col:'#ff6b3d'});
+    SFX.siren();
   }
   if(m.pf) for(var v2=0;v2<m.pf.length;v2++){
     if(m.pf[v2][0]==='h') playerHitFx(m.pf[v2][1]);
