@@ -756,8 +756,7 @@ function smashCells(x,y,r){
 function startCollapse(b){
   if(b.collapse||b.dead) return;
   b.collapse=0.9;
-  sndAt(shakeAt(b.x+b.w/2,b.y+b.h/2,14),SFX.crumble);
-  say('BUILDING COLLAPSING',1.6);
+  worldEv('crumble',b.x+b.w/2,b.y+b.h/2,-1,b.id);
 }
 /* flatten every building whose footprint sits inside a big blast */
 function collapseNear(x,y,radius){
@@ -795,8 +794,7 @@ function updateCollapses(dt){
       if(!gameOver) eachDiver(function(P){
         if(P.x>b.x-10&&P.x<b.x+b.w+10&&P.y>b.y-10&&P.y<b.y+b.h+10) hurt(120,P);
       });
-      blasts.push({x:b.x+b.w/2,y:b.y+b.h/2,r:0,max:Math.max(b.w,b.h)*0.8,t:0,life:0.7,col:'#6a6f7e'});
-      sndAt(shakeAt(b.x+b.w/2,b.y+b.h/2,16),SFX.crumble);
+      worldEv('collapsed',b.x+b.w/2,b.y+b.h/2,-1,b.id);
     }
   }
 }
@@ -860,8 +858,7 @@ function startRebuild(){
   }
   rebuild={q:q,i:0,t:0,dur:3.2};
   rubble=[];
-  say('RECONSTRUCTION CREWS DEPLOYED',2.5);
-  SFX.rebuild();
+  worldEv('rebuild',0,0);
 }
 function updateRebuild(dt){
   if(time>=nextRebuild){ nextRebuild+=REBUILD_EVERY; startRebuild(); }
@@ -1109,6 +1106,78 @@ function shakeAt(x,y,amt,radius){
   if(fall>0) shake=Math.max(shake,amt*fall);
   return fall;
 }
+/* ---- world events -------------------------------------------------------
+   The host is the only machine that simulates a building coming down, a pod
+   landing or a Fleshmob bringing its arms down. Everything below used to stop
+   there: a joining Helldiver watched a tower come apart in silence. These are
+   raised once, replayed on every machine, and each one judges the range from
+   where its own listener is standing. */
+var EVENT={
+  crumble:  {snd:'crumble',  shake:14},   /* a building starts to go */
+  collapsed:{snd:'crumble',  shake:16},   /* ...and finishes going */
+  incoming: {snd:'incoming', shake:0},
+  impact:   {snd:'impact',   shake:20, cape:90, capeR:220},
+  deploy:   {snd:'deploy',   shake:0},
+  sentrygo: {snd:null,       shake:0},
+  slam:     {snd:'slam',     shake:13},
+  bigslam:  {snd:'slam',     shake:11},
+  charge:   {snd:'charge',   shake:6},
+  roar:     {snd:'roar',     shake:0},
+  burst:    {snd:'burst',    shake:9},
+  thud:     {snd:'thud',     shake:0},
+  swing:    {snd:'swing',    shake:0},
+  throwb:   {snd:'throwb',   shake:0},
+  pickup:   {snd:'pickup',   shake:0},
+  discard:  {snd:'discard',  shake:0},
+  dry:      {snd:'dry',      shake:0},
+  swap:     {snd:'swap',     shake:0},
+  reloadOut:{snd:'reloadOut',shake:0},
+  reloadIn: {snd:'reloadIn', shake:0},
+  crush:    {snd:'crush',    shake:0},
+  bounce:   {snd:'bounce',   shake:0},
+  ping:     {snd:'ping',     shake:0},
+  /* announcements from orbit: everyone hears these wherever they are standing */
+  rebuild:  {snd:'rebuild',  shake:0, all:1, say:'RECONSTRUCTION CREWS DEPLOYED', saylen:2.5},
+  liberty:  {snd:'siren',    shake:0, all:1, say:'FOR LIBERTY!', saylen:4}
+};
+/* `who` is the diver whose own machine already played this, so it is not
+   played to them twice. Everything impersonal leaves it out. */
+function worldEv(kind,x,y,who,extra){
+  evPlay(kind,x,y,extra);
+  if(NET.role==='host'&&NET.ev.length<40)
+    NET.ev.push([kind,Math.round(x),Math.round(y),
+                 (who===undefined?-1:who),(extra===undefined?-1:extra)]);
+}
+function evPlay(kind,x,y,extra){
+  var E=EVENT[kind];
+  if(!E) return;
+  var fall=E.all?1:E.shake?shakeAt(x,y,E.shake):clamp(1-earDist(x,y)/1500,0,1);
+  if(E.snd&&SFX[E.snd]) sndAt(fall,SFX[E.snd]);
+  if(E.cape) eachDiver(function(P){
+    if(Math.hypot(P.x-x,P.y-y)<E.capeR) capeBlast(x,y,E.cape,P);
+  });
+  if(E.say) say(E.say,E.saylen);
+  var b=(extra>=0)?buildings[extra]:null;
+  if(kind==='crumble'){
+    if(b&&!b.collapse&&!b.dead) b.collapse=0.9;
+    say('BUILDING COLLAPSING',1.6);
+  } else if(kind==='collapsed'){
+    if(b){
+      b.collapse=0; b.dead=true;
+      blasts.push({x:b.x+b.w/2,y:b.y+b.h/2,r:0,max:Math.max(b.w,b.h)*0.8,
+                   t:0,life:0.7,col:'#6a6f7e'});
+    }
+  } else if(kind==='sentrygo'){
+    say('SENTRY DESTROYED',1.6);
+  } else if(kind==='burst'){
+    blasts.push({x:x,y:y,r:0,max:90,t:0,life:0.4,col:'#8d2b2b'});
+    for(var gz=0;gz<50;gz++){
+      var ga=rand(0,TAU), gs=rand(60,420);
+      particles.push({x:x,y:y,vx:Math.cos(ga)*gs,vy:Math.sin(ga)*gs,
+        life:rand(0.25,0.8),max:0.8,c:gz%3?'#7a1f1f':'#b33b3b',s:rand(2,6)});
+    }
+  }
+}
 /* play a world sound at the volume the distance deserves */
 function sndAt(fall,snd,arg){
   if(fall<=0.02) return;
@@ -1207,6 +1276,8 @@ function reset(){
   cam.x=player.x; cam.y=player.y;
   enemyId=0; netId=0;
   NET.seen={}; NET.mSt={}; NET.mPd={}; NET.mBl={}; NET.mBu={}; NET.mNd={};
+  /* a stale event would name a building index from the last map */
+  NET.ev=[]; NET.fx=[]; NET.kl=[]; NET.sp=[]; NET.pf=[]; NET.mk=[]; NET.ck=[]; NET.ca=[];
   for(var ci3=0;ci3<players.length;ci3++) capeInit(players[ci3]);
   /* in a GM match every last enemy is placed by hand, so no opening horde */
   if(!GMMATCH&&NET.role!=='client') for(var j=0;j<45;j++) spawnEnemy('voteless',true);
@@ -1315,7 +1386,7 @@ function fire(){
   var w=W_(), a=A_();
   if(player.reloading>0||player.cool>0) return;
   if(a.ammo<=0){
-    player.cool=0.25; SFX.dry();
+    player.cool=0.25; worldEv('dry',player.x,player.y);
     if(w.disposable) discardSupport();
     else if(a.mags>0) reload();
     return;
@@ -1348,17 +1419,17 @@ function fire(){
 /* Helldivers-style: a reload consumes one whole magazine; rounds left in the old one are lost. */
 function reload(){
   var w=W_(), a=A_();
-  if(w.disposable){ SFX.dry(); return; }        /* nothing to reload it with */
+  if(w.disposable){ worldEv('dry',player.x,player.y); return; }   /* nothing to reload it with */
   if(player.reloading>0||a.ammo>=w.mag) return;
-  if(a.mags<=0){ SFX.dry(); return; }
+  if(a.mags<=0){ worldEv('dry',player.x,player.y); return; }
   player.reloading=w.reload; player.reloadFx=0;
-  SFX.reloadOut();
+  worldEv('reloadOut',player.x,player.y);
 }
 function finishReload(){
   var w=W_(), a=A_();
   if(a.mags<=0) return;
   a.mags--; a.ammo=w.mag;
-  SFX.reloadIn();
+  worldEv('reloadIn',player.x,player.y);
 }
 function autoSwapAway(){
   if(W_().disposable) discardSupport();
@@ -1368,7 +1439,7 @@ function discardSupport(){
   var id=player.wep;
   player.arsenal[id].owned=false; player.arsenal[id].ammo=0;
   player.wep='ar'; player.reloading=0; player.cool=0.5;
-  SFX.discard();
+  worldEv('discard',player.x,player.y);
   var a=player.ang+rand(-0.5,0.5);
   junk.push({x:player.x,y:player.y,vx:Math.cos(a)*rand(180,300),vy:Math.sin(a)*rand(180,300),
     spin:rand(-8,8),rot:player.ang,life:9});
@@ -1383,7 +1454,7 @@ function equip(id){
   var a=player.arsenal[id];
   if(!a||!a.owned) return;
   player.wep=id; player.reloading=0; player.cool=0.25;
-  SFX.swap();
+  worldEv('swap',player.x,player.y);
 }
 
 /* ============================ EXPLOSIONS ============================ */
@@ -1476,7 +1547,7 @@ function useStim(){
 function meleeSwing(){
   if(player.meleeCd>0||player.inPod||gameOver) return;
   player.meleeCd=0.6; player.melee=0.24;
-  SFX.swing();
+  worldEv('swing',player.x,player.y,player.id);   /* the swinger already heard it */
   var reach=50, arc=0.9, hitAny=false;
   for(var i=0;i<enemies.length;i++){
     var e=enemies[i];
@@ -1505,7 +1576,10 @@ function meleeSwing(){
     if(damageCellAt(bx,by,34,0,0)) hitAny=true;
   }
   /* the thud carries at range, but the jolt up the arm is the swinger's alone */
-  if(hitAny){ SFX.thud(); if(player===me) shake=Math.max(shake,4); }
+  if(hitAny){
+    worldEv('thud',player.x,player.y);
+    if(player===me) shake=Math.max(shake,4);
+  }
 }
 function throwNade(){
   if(player.grenades<=0||player.nadeCool>0||gameOver||player.inPod) return;
@@ -1515,7 +1589,7 @@ function throwNade(){
   var d=Math.min(430,Math.hypot(NI.ax-player.x,NI.ay-player.y));
   nades.push({nid:nid(),who:player.id,sx:player.x,sy:player.y,x:player.x,y:player.y,
     tx:player.x+Math.cos(a)*d,ty:player.y+Math.sin(a)*d,t:0,dur:0.5,z:0,fuse:1.5,spin:0});
-  SFX.throwb();
+  worldEv('throwb',player.x,player.y);
 }
 
 /* ============================ INPUT ============================ */
@@ -1617,7 +1691,7 @@ function throwStratagem(tx,ty){
     landed:false, strat:armed});
   player.stt[sIdx(armed)]=armed.cd; player.armed=null;
   player.cool=0.35;
-  SFX.throwb();
+  worldEv('throwb',player.x,player.y);
 }
 
 /* ============================ PICKUPS ============================ */
@@ -1634,10 +1708,10 @@ function tryPickup(){
     var st=player.arsenal.bulletstorm;
     st.owned=true; st.ammo=p.ammo||WEAPONS.bulletstorm.mag; st.mags=0;
     player.wep='bulletstorm'; player.reloading=0; player.cool=0.3;
-    SFX.pickup();
+    worldEv('pickup',player.x,player.y);
   }else{
     resupplyPlayer();
-    SFX.pickup();
+    worldEv('pickup',player.x,player.y);
   }
   pickups.splice(best,1);
 }
@@ -1673,8 +1747,7 @@ function callIn(b){
     else puff(x,y,'#4fb477');
   }else if(s.id==='liberty'){
     /* every pod Super Earth could spare, all at once */
-    SFX.siren();
-    say('FOR LIBERTY!',4);
+    worldEv('liberty',x,y);
     dropPod(x,y,{kind:'liberty'});
     for(var i=0;i<5;i++){
       var a=(i/5)*TAU+rand(0,1);
@@ -1706,19 +1779,16 @@ function dropPod(x,y,payload){
         payload.kind==='sentry'?'#7fd4ff':
         payload.kind==='bulletstorm'?'#c6ff6b':
         payload.kind==='liberty'?'#ffffff':'#ffd21e'});
-  SFX.incoming();
+  worldEv('incoming',x,y);
 }
 function podLand(p){
   var x=p.x, y=p.y, k=p.payload.kind;
-  sndAt(shakeAt(x,y,20),SFX.impact);
-  eachDiver(function(P){
-    if(Math.hypot(P.x-x,P.y-y)<220) capeBlast(x,y,90,P);
-  });
+  worldEv('impact',x,y);
   /* a pod does not care whose head it lands on */
   if(k!=='player'&&!gameOver) eachDiver(function(P){
     var ppd=Math.hypot(P.x-x,P.y-y);
     if(ppd<46){
-      SFX.crush();
+      worldEv('crush',P.x,P.y);
       hurt(999,P);                                /* flattened outright */
     }else if(ppd<190){
       var fall=1-(ppd-46)/144;
@@ -1768,7 +1838,7 @@ function podLand(p){
   }else if(k==='sentry'){
     sentries.push({nid:nid(),x:x,y:y,hp:220,max:220,ang:0,cool:0,ammo:320,maxAmmo:320,
                    warm:1.5,dying:0});
-    SFX.deploy();
+    worldEv('deploy',x,y);
   }else if(k==='bulletstorm'){
     pickups.push({kind:'bulletstorm',x:x,y:y,bob:rand(0,6)});
     puff(x,y,'#c6ff6b');
@@ -2079,7 +2149,7 @@ function update(dt){
           var cga=Math.atan2(P.y-en.y,P.x-en.x);
           P.vx+=Math.cos(cga)*900; P.vy+=Math.sin(cga)*900;
           capeBlast(en.x,en.y,110,P);
-          sndAt(shakeAt(en.x,en.y,13),SFX.slam);
+          worldEv('slam',en.x,en.y);
           en.atk=1.2; en.chg=0; en.rec=1.3;
         });
         /* a charging mound does not trade with a turret, it goes straight over it */
@@ -2088,7 +2158,7 @@ function update(dt){
           if(dist(en,stg)<en.r+30){
             explode(stg.x,stg.y,120,80,13,'#9ecbff','sentry');
             sentries.splice(cs,1);
-            say('SENTRY DESTROYED',1.6);
+            worldEv('sentrygo',stg.x,stg.y);
             en.slow=0;                      /* barely breaks stride */
           }
         }
@@ -2112,7 +2182,7 @@ function update(dt){
       } else if(en.cw>0){
         en.cw-=dt;
         en.cdir=Math.atan2(player.y-en.y,player.x-en.x);          /* tracks you until it commits */
-        if(en.cw<=0){ en.chg=0.85; sndAt(shakeAt(en.x,en.y,6),SFX.charge); }
+        if(en.cw<=0){ en.chg=0.85; worldEv('charge',en.x,en.y); }
       } else if(en.wind>0){
         en.wind-=dt;
         if(en.wind<=0){                       /* the slam lands */
@@ -2126,7 +2196,7 @@ function update(dt){
           for(var t4=0;t4<sentries.length;t4++)
             if(dist(en,sentries[t4])<en.r+40) sentries[t4].hp-=70;
           if(MAP.city) damageArea(en.x,en.y,108,330);
-          sndAt(shakeAt(en.x,en.y,11),SFX.slam);
+          worldEv('bigslam',en.x,en.y);
           blasts.push({x:en.x,y:en.y,r:0,max:70,t:0,life:0.3,col:'#8d2b2b'});
           for(var sp2=0;sp2<18;sp2++){
             var sa3=rand(0,TAU);
@@ -2137,9 +2207,9 @@ function update(dt){
         }
       } else if(en.stun<=0&&onPlayer&&tgtP){
         if(best<en.r+player.r+34&&en.atk<=0){
-          en.wind=0.75; SFX.roar();
+          en.wind=0.75; worldEv('roar',en.x,en.y);
         } else if(en.chgCd<=0&&best>210&&best<900){
-          en.cw=0.9; en.chgCd=rand(8,13); SFX.roar();
+          en.cw=0.9; en.chgCd=rand(8,13); worldEv('roar',en.x,en.y);
         }
       }
     } else if(onPlayer&&tgtP&&best<en.r+tgtP.r+4&&en.atk<=0&&en.stun<=0){
@@ -2160,13 +2230,7 @@ function update(dt){
       if(NET.role==='host'&&anchorDist(en.x,en.y)<1500)
         NET.kl.push(Math.round(en.x),Math.round(en.y),flesh?1:0);
       if(flesh){
-        sndAt(shakeAt(en.x,en.y,9),SFX.burst);
-        blasts.push({x:en.x,y:en.y,r:0,max:90,t:0,life:0.4,col:'#8d2b2b'});
-        for(var gz=0;gz<50;gz++){
-          var ga=rand(0,TAU);
-          particles.push({x:en.x,y:en.y,vx:Math.cos(ga)*rand(60,420),vy:Math.sin(ga)*rand(60,420),
-            life:rand(0.3,0.9),max:0.9,c:gz%2?'#7a1f1f':'#a83b3b',s:rand(3,7)});
-        }
+        worldEv('burst',en.x,en.y);
         for(var cz=0;cz<3;cz++)
           corpses.push({x:en.x+rand(-22,22),y:en.y+rand(-22,22),a:rand(0,TAU),life:12,c:'#4a1414'});
         /* the mound comes apart into the bodies that made it */
@@ -2228,6 +2292,8 @@ function update(dt){
       if(st.warm<=0&&st.cool<=0&&Math.abs(diff)<0.2&&st.ammo>0){
         st.cool=60/850; st.ammo--;
         SFX.sentry();
+        if(NET.role==='host'&&NET.sp.length<96)
+          NET.sp.push(Math.round(st.x),Math.round(st.y),0,-1);
         var sa=st.ang+rand(-0.05,0.05);
         var smx=st.x+Math.cos(sa)*26, smy=st.y+Math.sin(sa)*26;
         bullets.push({nid:nid(),x:smx,y:smy,px:smx,py:smy,vx:Math.cos(sa)*1500,vy:Math.sin(sa)*1500,
@@ -2238,7 +2304,7 @@ function update(dt){
       explode(st.x,st.y,110,70,10,'#9ecbff','sentry');   /* killed -> cooks off */
       sentries.splice(s2,1);
     } else if(st.ammo<=0 && st.dying<=0){
-      st.dying=1.1; SFX.dry();                  /* out of ammo -> powers down and goes */
+      st.dying=1.1; worldEv('dry',st.x,st.y);   /* out of ammo -> powers down and goes */
     }
   }
 
@@ -2252,7 +2318,7 @@ function update(dt){
       if(!pointInWall(oldbx,bc.y)){ bc.vx*=-0.55; bc.x=oldbx; }
       else if(!pointInWall(bc.x,oldby)){ bc.vy*=-0.55; bc.y=oldby; }
       else { bc.vx*=-0.55; bc.vy*=-0.55; bc.x=oldbx; bc.y=oldby; }
-      SFX.bounce();
+      worldEv('bounce',bc.x,bc.y);
     }
     bc.spin+=Math.hypot(bc.vx,bc.vy)*dt*0.06;
     bc.vz-=1500*dt; bc.z+=bc.vz*dt;
@@ -2260,7 +2326,7 @@ function update(dt){
       bc.z=0;
       if(bc.vz<-60){                       /* bounce */
         bc.vz*=-0.42; bc.vx*=0.62; bc.vy*=0.62;
-        SFX.bounce();
+        worldEv('bounce',bc.x,bc.y);
         for(var bp=0;bp<5;bp++){
           var ba=rand(0,TAU);
           particles.push({x:bc.x,y:bc.y,vx:Math.cos(ba)*rand(20,90),vy:Math.sin(ba)*rand(20,90),
@@ -2278,7 +2344,7 @@ function update(dt){
     if(bc.landed){
       var pre=bc.call;
       bc.call-=dt;
-      if(Math.ceil(pre)!==Math.ceil(bc.call)&&bc.call>0) SFX.ping();
+      if(Math.ceil(pre)!==Math.ceil(bc.call)&&bc.call>0) worldEv('ping',bc.x,bc.y);
       if(bc.call<=0){ callIn(bc); balls.splice(bn,1); }
     }
   }
@@ -3065,7 +3131,7 @@ function hud(){
    sends input and receives snapshots. Nothing here runs in solo play. */
 var NET={role:'solo', ws:null, room:'', status:'', note:'', peer:false, hosting:false,
          acc:0, rate:1/12, inAcc:0, inRate:1/20, actions:[],
-         ck:[], ca:[], fx:[], kl:[], sn:[], pf:[], mk:[], sp:[], ping:0, pingAt:0, pingSeq:0,
+         ck:[], ca:[], fx:[], kl:[], sn:[], pf:[], mk:[], sp:[], ev:[], ping:0, pingAt:0, pingSeq:0,
          seen:{}, mSt:{}, mPd:{}, mBl:{}, mBu:{}, mNd:{},
          lastSnap:0, snapGap:0.083, mapId:'megacity', roster:null};
 var GM={cx:0, cy:0, credits:26, max:160, rate:2.6, sel:0, cool:0, spent:0, sent:0};
@@ -3073,7 +3139,7 @@ var GM_UNITS=[{id:'voteless', name:'VOTELESS', cost:1},
               {id:'flesh',    name:'FLESHMOB', cost:16}];
 var GM_MIN_RANGE=380;
 var COLIDX=['#ffe38a','#ffd9a0','#ffb347','#bfe9ff'];
-var SLOTW=[null, WEAPONS.ar, WEAPONS.pistol, WEAPONS.bulletstorm];
+var SLOTW=[null, WEAPONS.ar, WEAPONS.pistol, WEAPONS.bulletstorm];  /* 0 = a sentry */
 
 function netURL(){
   var f=el('relayurl'), v=f?f.value.trim():'';
@@ -3485,6 +3551,7 @@ function netSnapshot(){
   if(NET.pf.length){ snap.pf=NET.pf; NET.pf=[]; }
   if(NET.mk.length){ snap.mk=NET.mk; NET.mk=[]; }
   if(NET.sp.length){ snap.sp=NET.sp; NET.sp=[]; }
+  if(NET.ev.length){ snap.ev=NET.ev; NET.ev=[]; }
   if(paused) snap.pz=1;
   if(wipeT>0) snap.wp=Math.round(wipeT*10);
   netSend(snap);
@@ -3805,13 +3872,21 @@ function clientSnap(m){
     else if(PF[0]==='s'){ stimFx(); SFX.stim(); }
     else if(PF[0]==='m'){ say(PF[1],PF[3]); SFX.fail(); }
   }
+  /* everything the world did while we were not simulating it */
+  if(m.ev) for(var ei=0;ei<m.ev.length;ei++){
+    var EV=m.ev[ei];
+    if(me&&EV[3]===me.id) continue;        /* our own machine already played it */
+    evPlay(EV[0],EV[1],EV[2],EV[4]);
+  }
   /* squadmates' rifles, attenuated by how far away they are */
   if(m.sp) for(var sq=0;sq<m.sp.length;sq+=4){
     if(me&&m.sp[sq+3]===me.id) continue;      /* I already heard my own */
-    var SW=SLOTW[m.sp[sq+2]]; if(!SW) continue;
+    var SW=SLOTW[m.sp[sq+2]];
     var satt=clamp(1-earDist(m.sp[sq],m.sp[sq+1])/1400,0,1);
     if(satt<=0.04) continue;
-    sfxDist=satt; SFX.shot(SW); sfxDist=1;
+    sfxDist=satt;
+    if(SW) SFX.shot(SW); else SFX.sentry();     /* slot 0 is a turret, not a rifle */
+    sfxDist=1;
   }
   if(m.fx) for(var f2=0;f2<m.fx.length;f2++){
     var F=m.fx[f2];

@@ -170,6 +170,12 @@ never shows up as lag on your own body. Squadmates are pure interpolation.
   integers. A busy snapshot is a few KB.
 - Explosions, kills, gunshots and cell changes travel as events; each side plays its
   own sound and particles from them, attenuated by how far away they happened.
+- So does everything else the world does. Only the host simulates a building coming
+  down, a hellpod landing, a Fleshmob bringing its arms down or a Helldiver slapping a
+  fresh magazine in, so all of it is raised as a **world event** and replayed on every
+  machine, each judging the range from where its own listener stands. A building sends
+  the start and the end of its collapse, so the animation is driven by the host rather
+  than by a parallel timer that could drift.
 - Damage flashes and stim effects are addressed to one player id, so only the body it
   happened to feels it — and a shooter never gets their own gunshot replayed to them.
 - Input is routed by sender: your keys only ever move your own Helldiver, and a
