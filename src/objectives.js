@@ -9,11 +9,11 @@
 import { rand, clamp, TAU, pick } from './util.js';
 import { CFG } from './config.js';
 import {
-  S, nid, say, spark, blast, eachDiver, anchorDist, sim, isHost, falloff, later
+  S, nid, say, spark, blast, eachDiver, anchorDist, sim, falloff, later
 } from './state.js';
 import { SFX, sndAt } from './audio.js';
 import { worldEv } from './events.js';
-import { postArr } from './outbox.js';
+import './outbox.js';
 import { OBJECTIVES, OBJ_IDS, REWARD_TEXT, STRATS } from './data.js';
 import { spawnPoint, solidAt, openSpot } from './world.js';
 import { explode } from './combat.js';
