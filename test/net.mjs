@@ -23,6 +23,7 @@ import { buildMap, mapSeed, G, gIndex, CELL } from '../src/world.js';
 import { update, reset, NETIN, keys, mouse } from '../src/sim.js';
 import { spawnEnemy } from '../src/enemies.js';
 import { NET, LOBBY } from '../src/net.js';
+import { OUT, post, postArr } from '../src/outbox.js';
 import { netSnapshot, netSendCity, hostInput } from '../src/host.js';
 import { clientCity, clientSnap, updateClient, clearMaps } from '../src/client.js';
 import { placeSentry, dropPod, placeSentry as _ps } from '../src/strat.js';
@@ -306,6 +307,101 @@ section('6. Bandwidth at full tilt');
   ok('a worst-case second stays under 120 KB', perSec < 120 * 1024,
      `${(perSec / 1024).toFixed(1)} KB/s`);
 }
+
+section('7. Outbox channels do not collide with world keys');
+{
+  /* This is the shape of a bug that was live: OUT.ob (objective announcements)
+     and the snapshot's own `ob` (the objective LIST) shared a key, and the
+     Object.assign in netSnapshot let the announcements win. The client then
+     parsed an array of strings as a list of numbers and built an objective at
+     NaN. Nothing about it was visible until an objective happened to appear on
+     the same tick as a snapshot went out. */
+  setRole('host');
+  NET.peers = [{ id: 1 }];
+  NETIN.roster = NET.roster; NETIN.myId = 0;
+  buildMap('plains', 7);
+  reset();
+  S.running = true;
+  S.pods.length = 0;
+  for (const P of S.players) { P.inPod = false; P.guard = 0; }
+  S.objectives.push({
+    nid: 77, id: 'radar', D: OBJECTIVES.radar, kind: 'hold', name: OBJECTIVES.radar.name,
+    x: 260, y: -120, t: 0, prog: 5, done: false, radius: 130, col: OBJECTIVES.radar.col,
+    field: 0, hp: 0, max: 1, armor: 0, need: 0, have: 0, spin: 0, active: 1, timeout: 999
+  });
+  /* stuff every channel, so any future collision shows up here too */
+  for (const ch of Object.keys(OUT)) {
+    if (ch === 'ev' || ch === 'fx' || ch === 'pf' || ch === 'bm') postArr(ch, ['x', 1, 2, 3, 4]);
+    else post(ch, 1, 2, 3, 4, 5, 6, 7);
+  }
+  sent.length = 0;
+  netSnapshot();
+  const snap = sent[0].msg;
+  const worldKeys = ['ps', 's', 'pk', 'pd', 'bl', 'nd', 'dr', 'ob', 'e', 'md', 'gm'];
+  const clash = Object.keys(OUT).filter(k => worldKeys.includes(k));
+  ok('no outbox channel shares a name with a world key', clash.length === 0, clash.join());
+  ok('the objective list is still a list of numbers',
+     Array.isArray(snap.ob) && snap.ob.every(v => typeof v === 'number'),
+     JSON.stringify(snap.ob && snap.ob.slice(0, 4)));
+
+  LOBBY.myId = 1;
+  clientCity({ t: 'city', map: 'plains', seed: 7, lv: 1, cfg: CFG, rs: NET.roster, gm: 0, lives: 5 });
+  clientSnap(snap);
+  const o = S.objectives[0];
+  ok('the client rebuilt exactly one objective', S.objectives.length === 1, String(S.objectives.length));
+  ok('...at real coordinates, not NaN',
+     !!o && Number.isFinite(o.x) && Number.isFinite(o.y) && Math.abs(o.x - 260) < 2,
+     o ? `${o.x},${o.y}` : 'none');
+  ok('...and it is the right objective', !!o && o.id === 'radar', o ? o.id : 'none');
+}
+
+section('8. A far body the host skipped this tick is not deleted');
+{
+  /* Past NETNEAR the host refreshes the small and medium classes every third
+     word. If the client treats silence as death out there, the edge of the
+     screen flickers with bodies blinking in and out. */
+  setRole('host');
+  NET.peers = [{ id: 1 }];
+  NETIN.roster = NET.roster; NETIN.myId = 0;
+  buildMap('plains', 8);
+  reset();
+  S.running = true;
+  S.pods.length = 0;
+  for (const P of S.players) { P.inPod = false; P.guard = 0; }
+  S.enemies.length = 0;
+  const B = S.players.find(P => P.id === 1);
+  B.x = 0; B.y = 0;
+  S.players.find(P => P.id === 0).x = 0;
+  const far = spawnEnemy('warrior', { x: 1400, y: 0 });
+  const near = spawnEnemy('warrior', { x: 200, y: 0 });
+  const idsOf = m => { const a = []; for (let i = 0; i < m.e.length; i += 7) a.push(m.e[i]); return a; };
+  const snaps = [];
+  for (let i = 0; i < 4; i++) { sent.length = 0; netSnapshot(); snaps.push(sent[0].msg); }
+  const has = snaps.map(m => ({ far: idsOf(m).includes(far.id), near: idsOf(m).includes(near.id) }));
+  ok('the near body is in every word', has.every(h => h.near), JSON.stringify(has));
+  ok('the far body is in some but not all', has.some(h => h.far) && !has.every(h => h.far),
+     JSON.stringify(has.map(h => h.far)));
+
+  const withFar = snaps.find(m => idsOf(m).includes(far.id));
+  const withoutFar = snaps.find(m => !idsOf(m).includes(far.id));
+  LOBBY.myId = 1;
+  clientCity({ t: 'city', map: 'plains', seed: 8, lv: 1, cfg: CFG, rs: NET.roster, gm: 0, lives: 5 });
+  clientSnap(withFar);
+  ok('the client received the far body', S.enemies.some(e => e.id === far.id));
+  clientSnap(withoutFar);
+  ok('...and keeps it when the next word skips it',
+     S.enemies.some(e => e.id === far.id), 'it was deleted');
+  /* a NEAR body going silent really does mean it died, though */
+  const noNear = JSON.parse(JSON.stringify(withFar));
+  const kept = [];
+  for (let i = 0; i < noNear.e.length; i += 7)
+    if (noNear.e[i] !== near.id) kept.push(...noNear.e.slice(i, i + 7));
+  noNear.e = kept;
+  clientSnap(noNear);
+  ok('a near body going silent is treated as dead',
+     !S.enemies.some(e => e.id === near.id), 'it survived');
+}
+
 
 console.log('\n' + '─'.repeat(60));
 if (failures.length) {

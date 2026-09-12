@@ -14,7 +14,9 @@ import { CFG } from './config.js';
 import { S, diverById, isHost } from './state.js';
 import { drain } from './outbox.js';
 import { NET, netSend } from './net.js';
-import { STRATS, STRAT_BY_ID, TROOP_IDS, ANG8 } from './data.js';
+import {
+  STRATS, STRAT_BY_ID, TROOP_IDS, ANG8, NETCULL, NETNEAR, NETMAX
+} from './data.js';
 import { netCK, netCA, mapSeed } from './world.js';
 import { reload, tryPickup, throwNade, meleeSwing, useStim, equipSlot } from './diver.js';
 import { throwStratagem, reinforceAt } from './strat.js';
@@ -30,9 +32,7 @@ const R = Math.round;
    kilobytes a second down a link that may not have it, and the result is the
    rubber-banding rather than the frame rate. Past about two hundred bodies the
    ones you cannot see are not worth the bandwidth. */
-const CULL = { small: 1300, medium: 1700, large: 2800 };
-const NEAR = 1100;
-const MAXSEND = 210;
+const CULL = NETCULL, NEAR = NETNEAR, MAXSEND = NETMAX;
 
 export function netSendCity() {
   netSend({

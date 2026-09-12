@@ -38,6 +38,17 @@ export const FACTION_IDS = ['terminid', 'automaton', 'illuminate'];
    worth four characters twelve times a second for every body on the map. */
 export const ANG8 = 256 / (Math.PI * 2);
 
+/* What the host sends, and therefore what the client is entitled to assume.
+   Both ends read these from here: if they drift apart, the client starts
+   deleting bodies the host simply has not mentioned this tick, and the edge of
+   the screen flickers with things blinking in and out.
+     NETCULL  how far each size class is worth sending at all
+     NETNEAR  inside this, everything is sent every single snapshot
+     NETMAX   hard ceiling of bodies per snapshot, nearest first */
+export const NETCULL = { small: 1300, medium: 1700, large: 2800 };
+export const NETNEAR = 1100;
+export const NETMAX = 210;
+
 /* size class -> how far it can be heard, and how heavy it feels */
 export const SIZE = {
   small: { i: 0, hear: 620, shake: 0, mass: 1, foot: 0 },

@@ -96,7 +96,6 @@ function spawnObjective(forceId) {
   if (D.kind === 'carry') scatterPickups(o, 'shell');
   worldEv('objNew', o.x, o.y);
   say('NEW OBJECTIVE — ' + D.name, 4);
-  if (isHost()) postArr('ob', ['new', o.nid, id, Math.round(o.x), Math.round(o.y)]);
 }
 function scatterPickups(o, kind) {
   const D = o.D;
@@ -157,7 +156,6 @@ function stepObjective(o, dt, idx) {
     say('OBJECTIVE LOST — ' + o.name, 3.5);
     cleanup(o);
     S.objectives.splice(idx, 1);
-    if (isHost()) postArr('ob', ['fail', o.nid]);
   }
 }
 
@@ -169,7 +167,6 @@ function finish(o, idx) {
   say(o.name + ' COMPLETE — ' + (REWARD_TEXT[o.D.reward] || ''), 4.5);
   cleanup(o);
   S.objectives.splice(idx, 1);
-  if (isHost()) postArr('ob', ['done', o.nid, o.D.reward, Math.round(o.x), Math.round(o.y)]);
   if (OBJ.hook) OBJ.hook(o);
   for (let i = 0; i < 30; i++) {
     const a = rand(0, TAU);

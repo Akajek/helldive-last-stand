@@ -15,7 +15,8 @@ import { SFX, sndAt, A } from './audio.js';
 import { evPlay, capeInit, capeUpdate } from './events.js';
 import { NET, netSend, LOBBY } from './net.js';
 import {
-  STRATS, STRAT_BY_ID, TROOPS, TROOP_IDS, SIZE, SLOTW, SENTRIES, PROJ, OBJECTIVES, ANG8
+  STRATS, STRAT_BY_ID, TROOPS, TROOP_IDS, SIZE, SLOTW, SENTRIES, PROJ, OBJECTIVES,
+  ANG8, NETCULL, NETNEAR
 } from './data.js';
 import { buildMap, killCell, restoreCell, resolveCircle } from './world.js';
 import { makeDiver, W_, A_ } from './diver.js';
@@ -204,17 +205,18 @@ export function clientSnap(m) {
       e.zT = ((w >> 8) & 63) * 2;
       e.seenAt = S.time;
     }
-    /* Only drop what the host could have mentioned. A body that fell out of MY
-       cull radius is not dead -- it is just far away, and deleting it makes the
-       edge of the screen flicker with things blinking in and out. */
+    /* Silence from the host means "dead" only for a body it was obliged to
+       mention. Past NETNEAR it refreshes the small and medium classes every
+       third word, and past the cull radius it stops mentioning them at all --
+       so anything out there is dropped on a timer instead, or the edge of the
+       screen flickers with things blinking in and out. */
     for (let j = S.enemies.length - 1; j >= 0; j--) {
       const e = S.enemies[j];
       if (seen[e.id]) continue;
       const d = earDist(e.x, e.y);
-      const inRange = d < (e.size === 'large' ? 2900 : e.size === 'medium' ? 1800 : 1400);
-      const stale = S.time - (e.seenAt || 0) > 1.4;
-      if (inRange && !stale && e.size === 'small' && d > 900) continue;  /* far tier */
-      if (inRange || stale) { delete M.en[e.id]; S.enemies.splice(j, 1); }
+      const owed = e.size === 'large' ? d < NETCULL.large : d < NETNEAR;
+      const stale = S.time - (e.seenAt || 0) > 1.6;
+      if (owed || stale) { delete M.en[e.id]; S.enemies.splice(j, 1); }
     }
   }
 

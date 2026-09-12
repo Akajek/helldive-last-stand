@@ -14,11 +14,14 @@ export const OUT = {
   mk: [],   /* target markers */
   bs: [],   /* friendly rounds, sent once at birth rather than every snapshot */
   eb: [],   /* hostile rounds, likewise */
-  bm: [],   /* beams and arcs: transient lines */
-  ob: []    /* objective state changes */
+  bm: []    /* beams and arcs: transient lines */
+  /* NOTE: no 'ob' channel. The snapshot's own `ob` key is the objective LIST,
+     and an outbox channel of the same name wins the Object.assign in
+     netSnapshot() and gets parsed as one -- which built an objective at NaN.
+     Announcements ride the 'ev' channel like everything else. */
 };
 
-const CAPS = { ev: 64, fx: 32, kl: 120, pf: 32, sp: 160, mk: 8, bs: 400, eb: 400, bm: 64, ob: 24 };
+const CAPS = { ev: 64, fx: 32, kl: 120, pf: 32, sp: 160, mk: 8, bs: 400, eb: 400, bm: 64 };
 
 export function post(ch, ...vals) {
   const a = OUT[ch];
