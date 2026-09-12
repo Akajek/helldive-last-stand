@@ -8,8 +8,8 @@
 import { rand, clamp, TAU, ease, angLerp, el } from './util.js';
 import { CFG, LOADOUT } from './config.js';
 import {
-  S, setRole, nid, say, spark, blast, decal, diverById, livingDiver, earDist, falloff,
-  addShake, stepTimers
+  S, setRole, nid, say, spark, blast, decal, diverById, earDist, falloff,
+  addShake, stepTimers, updateWatch
 } from './state.js';
 import { SFX, sndAt, A } from './audio.js';
 import { evPlay, capeInit, capeUpdate } from './events.js';
@@ -168,6 +168,7 @@ export function clientSnap(m) {
     D.grenades = P.gr; D.stims = P.sm;
     D.reloading = P.rl / 100; D.guard = P.gd / 100;
     D.waiting = P.wt / 10; D.down = !!P.dn; D.inPod = !!P.ip; D.dead = !!P.dd;
+    D.linkDown = P.lk ? 1 : 0;
     D.stimT = P.st / 10;
     D.shield = P.sh; D.shieldMax = P.sx;
     D.carrying = P.cy ? 'shell' : null;
@@ -310,6 +311,11 @@ export function clientSnap(m) {
   });
 
   /* ---- the destructible world ---- */
+  /* radar contacts: a dot and nothing else, and they expire on their own so a
+     sweep that ends does not leave a map full of ghosts */
+  if (m.rd) { S.radar = m.rd; S.radarAt = S.time; }
+  else if (S.radar && (S.time - S.radarAt > 1.2 || S.mod.radar <= 0)) S.radar = null;
+
   if (m.ck) for (let i = 0; i < m.ck.length; i += 2) killCell(m.ck[i], m.ck[i + 1], 0, 0, true);
   if (m.ca) for (let i = 0; i < m.ca.length; i += 4)
     restoreCell(m.ca[i], m.ca[i + 1], m.ca[i + 2], m.ca[i + 3]);
@@ -390,7 +396,7 @@ export const GMSHADOW = { credits: 0, score: 0 };
 export function updateClient(dt) {
   S.time += dt;
   S.dt = dt;
-  if (!S.me && S.players.length) { /* a spectator rides the squad */ }
+  updateWatch();
 
   /* interpolation */
   for (const e of S.enemies) {
@@ -488,16 +494,13 @@ export function updateClient(dt) {
     me.punch -= me.punch * ease(14, dt);
   }
 
-  /* camera */
-  const eye = me || S.players[0];
+  /* camera: the body this screen is following, which is a squadmate while I am
+     waiting to be called back in */
+  const eye = S.watch || me || S.players[0];
   if (eye) {
-    const lean = eye.down ? 0.6 : 0.16;
+    const lean = (me && me.waiting > 0) ? 0.6 : eye === me ? 0.16 : 0;
     let tx = eye.x + (mouse.wx - eye.x) * lean, ty = eye.y + (mouse.wy - eye.y) * lean;
     if (me && me.inPod) { const p = myPod(); if (p) { tx = p.x; ty = p.y; } }
-    if (me && me.down && me.waiting <= 0) {
-      const w = livingDiver(me);
-      if (w) { tx = w.x; ty = w.y; }
-    }
     S.cam.x += (tx - S.cam.x) * ease(6, dt);
     S.cam.y += (ty - S.cam.y) * ease(6, dt);
   }
@@ -513,7 +516,11 @@ export function updateClient(dt) {
     NET.inAcc = 0;
     const kb = (keys['w'] ? 1 : 0) | (keys['s'] ? 2 : 0) | (keys['a'] ? 4 : 0) |
                (keys['d'] ? 8 : 0) | (keys['shift'] ? 16 : 0) | (mouse.down ? 32 : 0);
+    /* `w` is who I am watching. The host culls the world it sends me around it,
+       or spectating a squadmate is a walk through an empty map: the bodies I was
+       sent are all standing around my corpse, half a mile behind the camera. */
     netSend({ t: 'in', ax: Math.round(mouse.wx), ay: Math.round(mouse.wy), k: kb,
+              w: S.watch && S.watch !== me ? S.watch.id : undefined,
               a: NET.actions.length ? NET.actions : undefined });
     NET.actions = [];
   }

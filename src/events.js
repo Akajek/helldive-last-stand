@@ -135,12 +135,19 @@ export function evPlay(kind, x, y, extra) {
     }
     case 'shipWarn':
       S.shipFx = { t: 0, x, y, phase: 'warn' };
+      /* The ring that says which fifteen hundred units are about to stop
+         existing. It used to be set only by the code that drops the ship, which
+         runs on the host -- so a joining Helldiver got the siren, the shadow and
+         no idea which way to run. */
+      S.shipTarget = { x, y, t: 0 };
       break;
     case 'shipFall':
       S.shipFx = { t: 0, x, y, phase: 'fall' };
+      S.shipTarget = S.shipTarget || { x, y, t: 0 };
       break;
     case 'shipHit':
       S.shipFx = { t: 0, x, y, phase: 'hit' };
+      S.shipTarget = null;
       S.flashWhite = 1.4;
       break;
   }

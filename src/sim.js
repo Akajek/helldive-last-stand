@@ -2,7 +2,9 @@
 'use strict';
 import { TAU, ease } from './util.js';
 import { CFG, LOADOUT } from './config.js';
-import { S, say, livingDiver, isSquad, amGM, sim, stepTimers, role } from './state.js';
+import {
+  S, say, isSquad, amGM, sim, stepTimers, role, updateWatch
+} from './state.js';
 import { SFX, MUS } from './audio.js';
 import { worldEv, capeInit } from './events.js';
 import { clearOut } from './outbox.js';
@@ -52,7 +54,8 @@ export function reset() {
   S.gameOver = false; S.wipeT = 0; S.wave = 0; S.waveT = 0;
   S.enemyId = 0; S.netId = 0;
   S.nextRebuild = REBUILD_EVERY; S.rebuildQ = null;
-  S.mod = { confuse: 0, radar: 0, noSpawn: null, spore: 0, jam: [], barrage: 0, uplink: 0 };
+  S.mod = { confuse: 0, radar: 0, noSpawn: null, spore: 0, barrage: 0, uplink: 0 };
+  S.watch = null; S.watchId = -1; S.radar = null; S.radarAt = 0;
   netCK.length = 0; netCA.length = 0;
   clearOut();
   resetDirector();
@@ -146,6 +149,10 @@ export function update(dt) {
     MI.ax = mouse.wx; MI.ay = mouse.wy;
   }
 
+  /* Who this screen is following, worked out before anything makes a noise --
+     everything downstream asks where the ears are. */
+  updateWatch();
+
   /* Every diver is simulated the same way; their own sounds are scaled by how
      far away they are from this browser's ears. */
   for (const P of S.players) updateDiver(P, dt);
@@ -184,20 +191,18 @@ export function update(dt) {
 export const GMTICK = { fn: null };
 
 function camera(dt) {
-  const eye = S.me || S.players[0];
+  /* lying in the street is dull: ride whoever is still standing until somebody
+     calls you in. S.watch is that person, and the tactical map and the ears are
+     reading the same answer. */
+  const eye = S.watch || S.me || S.players[0];
   if (!eye) return;
   const eyePod = !!(S.me && S.me.inPod);
-  const lean = eye.waiting > 0 ? 0.6 : 0.16;
+  const lean = (S.me && S.me.waiting > 0) ? 0.6 : 0.16;
   let tx = eye.x + (eye.inp.ax - eye.x) * lean;
   let ty = eye.y + (eye.inp.ay - eye.y) * lean;
   if (eyePod) {
     const mp = myPod();
     if (mp) { tx = mp.x; ty = mp.y; }
-  }
-  /* lying in the street is dull: ride a squadmate until somebody calls you in */
-  if (S.me && S.me.down && S.me.waiting <= 0) {
-    const wt = livingDiver(S.me);
-    if (wt) { tx = wt.x; ty = wt.y; }
   }
   if (amGM() && GMCAM.get) { const g = GMCAM.get(); tx = g.x; ty = g.y; }
   const k = Math.min(1, dt * (eyePod ? 3 : 6));

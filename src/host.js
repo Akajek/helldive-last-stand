@@ -53,6 +53,10 @@ export function hostInput(m) {
      addresses nobody, and the lookup failing is exactly how that is enforced */
   const P = diverById(m.from);
   if (!P) return;
+  /* who their screen is following: their own body unless they are down and
+     watching a squadmate, in which case the world they are sent is culled
+     around the squadmate instead */
+  P.watch = (typeof m.w === 'number' && m.w !== P.id) ? m.w : -1;
   const IN = P.inp;
   IN.ax = m.ax; IN.ay = m.ay;
   const k = m.k | 0;
@@ -96,6 +100,7 @@ function snapDiver(P) {
     rl: R(P.reloading * 100), gd: R(P.guard * 100),
     ki: R(P.kick * 1000), wt: R(P.waiting * 10),
     dn: P.down ? 1 : 0, ip: P.inPod ? 1 : 0, dd: P.dead ? 1 : 0,
+    lk: P.linkDown ? 1 : 0,
     st: R(P.stimT * 10), ml: R(P.melee * 100), sr: P.sprint ? 1 : 0,
     sh: R(P.shield), sx: R(P.shieldMax), cy: P.carrying ? 1 : 0,
     bu: P.burn > 0 ? 1 : 0, cd
@@ -176,11 +181,38 @@ export function netSnapshot() {
   if (!targets.length) return;
   for (const peer of targets) {
     const P = diverById(peer.id);
-    const ax = P ? P.x : S.cam.x, ay = P ? P.y : S.cam.y;
+    /* the slice of the world each listener gets is centred on what they are
+       LOOKING at, which is a squadmate while they are waiting to be called in */
+    const eye = (P && P.watch >= 0 && diverById(P.watch)) || P;
+    const ax = eye ? eye.x : S.cam.x, ay = eye ? eye.y : S.cam.y;
     base.e = cullEnemies(ax, ay, NET.tick);
+    base.rd = radarBlips(ax, ay);
     base.to = peer.id;
     netSend(base);
   }
+}
+
+/* THE RADAR SWEEP
+   The radar objective promises a full sweep out to 3200 units. On the host that
+   costs nothing -- it has every body already. A joining Helldiver has only what
+   was culled to them at 1300, so the reward they helped earn did nothing at all
+   on their screen.
+   So while the sweep is up they get blips: a position and what kind of thing it
+   is, nothing else, coarse to a 16-unit grid and only every fourth word. It is
+   a radar contact, not a body -- you cannot shoot it, and it is not meant to be
+   drawn as anything but a dot. */
+const RADAR_R = 3200, RADAR_MAX = 320, RADAR_EVERY = 4;
+function radarBlips(ax, ay) {
+  if (S.mod.radar <= 0 || (NET.tick % RADAR_EVERY)) return undefined;
+  const out = [];
+  for (const en of S.enemies) {
+    const dx = en.x - ax, dy = en.y - ay;
+    if (dx * dx + dy * dy > RADAR_R * RADAR_R) continue;
+    out.push(R(en.x / 16), R(en.y / 16),
+             FACTION_IDS.indexOf(en.fac) * 4 + (en.size === 'large' ? 2 : en.size === 'medium' ? 1 : 0));
+    if (out.length >= RADAR_MAX * 3) break;
+  }
+  return out;
 }
 
 function cullEnemies(ax, ay, tick) {

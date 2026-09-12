@@ -18,7 +18,9 @@ globalThis.location = { protocol: 'http:', host: 'localhost:8080' };
 
 import { S, setRole, role } from '../src/state.js';
 import { CFG, LOADOUT } from '../src/config.js';
-import { MAPS, TROOP_IDS, TROOPS, STRATS, STRAT_BY_ID, OBJECTIVES, SENTRIES } from '../src/data.js';
+import {
+  MAPS, TROOP_IDS, TROOPS, STRATS, STRAT_BY_ID, OBJECTIVES, SENTRIES, NETCULL
+} from '../src/data.js';
 import { buildMap, mapSeed, G, gIndex, CELL } from '../src/world.js';
 import { update, reset, NETIN, keys, mouse } from '../src/sim.js';
 import { spawnEnemy } from '../src/enemies.js';
@@ -479,6 +481,113 @@ section('9. The orbital laser, and bodies that actually move');
   clientSnap(gone);
   ok('when the host is done with it, so is the client', S.beamRuns.length === 0,
      String(S.beamRuns.length));
+}
+
+
+section('10. The world is culled around what you are LOOKING at');
+{
+  /* Down and watching a squadmate, the host went on culling the world around
+     the corpse -- so the camera was over a firefight with none of the bodies in
+     it, and the tactical map was drawing a street nobody could see. */
+  setRole('host');
+  NETIN.roster = NET.roster; NETIN.myId = 0;
+  buildMap('plains', 77);
+  reset();
+  S.running = true;
+  S.pods.length = 0;
+  for (const P of S.players) { P.inPod = false; P.guard = 0; }
+  S.enemies.length = 0;
+  const A10 = S.players.find(P => P.id === 0), B10 = S.players.find(P => P.id === 1);
+  A10.x = 0; A10.y = 0;
+  B10.x = 3400; B10.y = 0;
+  /* a fight around ALPHA, and nothing at all where BRAVO is lying */
+  for (let i = 0; i < 40; i++)
+    spawnEnemy('scavenger', { x: (i % 8) * 40 - 160, y: ((i / 8) | 0) * 40 - 80 });
+
+  NET.peers = [{ id: 1, name: 'BRAVO' }];
+  sent.length = 0;
+  hostInput({ t: 'in', from: 1, ax: 3400, ay: 0, k: 0 });
+  netSnapshot();
+  const own = sent.pop().msg;
+  ok('on their feet they are sent their own surroundings', own.e.length === 0,
+     String(own.e.length / 7) + ' bodies');
+
+  /* now they are down, and their screen is on ALPHA */
+  B10.down = true; B10.hp = 1;
+  sent.length = 0;
+  hostInput({ t: 'in', from: 1, ax: 3400, ay: 0, k: 0, w: 0 });
+  netSnapshot();
+  const watching = sent.pop().msg;
+  line('  culled around their corpse: 0 bodies; around who they are watching: ' +
+       (watching.e.length / 7));
+  ok('spectating, they are sent the fight they are looking at',
+     watching.e.length / 7 > 20, String(watching.e.length / 7));
+
+  /* and a watch id that is not a real diver cannot move somebody else's view */
+  sent.length = 0;
+  hostInput({ t: 'in', from: 1, ax: 3400, ay: 0, k: 0, w: 99 });
+  netSnapshot();
+  ok('a watch id for nobody falls back to their own body',
+     sent.pop().msg.e.length === 0);
+}
+section('11. The radar sweep reaches the people who earned it');
+{
+  /* The radar objective promises a sweep out to 3200 units. The host has every
+     body already; a joining Helldiver only has what was culled to them at 1300,
+     so the reward did nothing at all on their screen. */
+  S.mod.radar = 0;
+  NET.tick = 0;
+  sent.length = 0;
+  netSnapshot();
+  ok('no sweep, no blips', sent.pop().msg.rd === undefined);
+
+  S.mod.radar = 100;
+  /* a pack out past the cull radius for its size class: 2600 units from the
+     listener, where a snapshot would never mention it */
+  for (let i = 0; i < 12; i++) spawnEnemy('warrior', { x: 800 + i * 20, y: 0 });
+  let blips = null;
+  for (let i = 0; i < 4 && !blips; i++) {
+    sent.length = 0;
+    netSnapshot();
+    const m = sent.pop().msg;
+    if (m.rd) blips = m.rd;
+  }
+  ok('the sweep is sent while it is up', !!blips, blips ? String(blips.length / 3) : 'never');
+  if (blips) {
+    /* the listener is BRAVO, lying at 3400 */
+    let far = 0;
+    for (let i = 0; i < blips.length; i += 3)
+      if (Math.hypot(blips[i] * 16 - 3400, blips[i + 1] * 16) > NETCULL.medium) far++;
+    line('  ' + (blips.length / 3) + ' contacts, ' + far +
+         ' of them past the radius a snapshot would ever mention');
+    ok('...and it carries contacts the snapshot never would', far > 0, String(far));
+    ok('a contact is three numbers, not a body', blips.length % 3 === 0);
+  }
+  /* it is not sent on every word: it is a sweep, not a second snapshot */
+  let sweeps = 0;
+  for (let i = 0; i < 8; i++) {
+    sent.length = 0;
+    netSnapshot();
+    if (sent.pop().msg.rd) sweeps++;
+  }
+  ok('the sweep is sent at a fraction of the snapshot rate', sweeps > 0 && sweeps <= 3,
+     String(sweeps) + ' of 8');
+
+  /* what it costs at its worst: a full sweep with the map packed */
+  for (let i = 0; i < 500; i++)
+    spawnEnemy('scavenger', { x: 3400 + Math.cos(i) * (i % 3000), y: Math.sin(i * 2) * 2800 });
+  let worst = 0;
+  for (let i = 0; i < 8; i++) {
+    sent.length = 0;
+    netSnapshot();
+    const w = sent.pop();
+    if (w.msg.rd) worst = Math.max(worst, JSON.stringify(w.msg.rd).length);
+  }
+  const kbs = worst * (12 / 4) / 1024;
+  line('  worst sweep: ' + worst + ' bytes every fourth word -> ' + kbs.toFixed(1) + ' KB/s');
+  ok('a sweep does not cost more than the snapshot it rides on', kbs < 20, kbs.toFixed(1));
+  S.mod.radar = 0;
+  NET.peers = [];
 }
 
 console.log('\n' + '─'.repeat(60));

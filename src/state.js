@@ -24,15 +24,22 @@ export const S = {
   map: MAPS.plains, world: 6000,
   /* ---- roster ---- */
   players: [], me: null, livesLeft: 5, wipeT: 0, gmMatch: false,
+  /* Who this screen is FOLLOWING, which is not always who I am: lying in the
+     street waiting for a reinforcement, it is whoever is still standing. The
+     camera, the tactical map, this browser's ears and the slice of the world the
+     host sends me all read it, because when they disagreed the result was a view
+     of one fight, a map of another, and silence over both. */
+  watch: null, watchId: -1,
   /* ---- things ---- */
   enemies: [], bullets: [], ebullets: [], pickups: [], sentries: [], balls: [],
   pods: [], blasts: [], particles: [], corpses: [], nades: [], junk: [],
   beams: [], objectives: [], drones: [], timers: [], decals: [], beamRuns: [],
   /* ---- set piece state ---- */
   wreck: null, shipTarget: null, shipFx: null, flashWhite: 0,
+  radar: null, radarAt: 0,
   nextRebuild: 75, rebuildQ: null, caveRooms: null, ping: 0,
   /* ---- world modifiers set by objectives ---- */
-  mod: { confuse: 0, radar: 0, noSpawn: null, spore: 0, jam: [], barrage: 0, uplink: 0 },
+  mod: { confuse: 0, radar: 0, noSpawn: null, spore: 0, barrage: 0, uplink: 0 },
   /* ---- toast line ---- */
   toast: { t: 0, max: 3, txt: '' },
   /* ---- ids ---- */
@@ -102,11 +109,31 @@ export function liveCount() {
 }
 export function squadMul() { return 1 + Math.max(0, liveCount() - 1) * 0.35 * CFG.squad; }
 
+/* ============================ WHO I AM WATCHING ============================
+   Normally me. Flat on my back with nothing to do but wait, whoever is still
+   on their feet -- and it STAYS them until they go down too, rather than
+   switching to whoever happens to be nearest this frame, which is a camera that
+   jumps between two people every time they cross. */
+export function updateWatch() {
+  const me = S.me;
+  if (!me) { S.watch = null; S.watchId = -1; return null; }
+  /* your own drop site is your business: stay on your own body while choosing it */
+  if (!me.down || me.waiting > 0) { S.watch = me; S.watchId = -1; return me; }
+  let w = S.watchId >= 0 ? diverById(S.watchId) : null;
+  if (!w || w.dead || w.down || w.inPod) {
+    w = livingDiver(me);
+    S.watchId = w ? w.id : -1;
+  }
+  S.watch = w || me;
+  return S.watch;
+}
+export function watched() { return S.watch || S.me; }
+
 /* ============================ THE LISTENER ============================
-   Where this browser is hearing from: my own body, or the camera when I have
-   none (the Game Master, or somebody watching). */
-export function earX() { return S.me ? S.me.x : S.cam.x; }
-export function earY() { return S.me ? S.me.y : S.cam.y; }
+   Where this browser is hearing from: the body it is following, or the camera
+   when it is following nobody (the Game Master, or somebody watching). */
+export function earX() { const w = S.watch || S.me; return w ? w.x : S.cam.x; }
+export function earY() { const w = S.watch || S.me; return w ? w.y : S.cam.y; }
 export function earDist(x, y) { return Math.hypot(x - earX(), y - earY()); }
 /* How hard a thing at (x,y) lands on THIS screen, and how loud it should be.
    `reach` lets a Bile Titan be heard from four times as far as a Scavenger. */
@@ -120,9 +147,12 @@ export function shakeAt(x, y, amt, radius, reach) {
 }
 export function addShake(v) { S.shake = Math.max(S.shake, v); }
 
-/* Hearing is local: a rifle two blocks away should not be as loud as mine. */
+/* Hearing is local: a rifle two blocks away should not be as loud as mine.
+   "Mine" is the body I am watching -- spectating a squadmate and hearing my own
+   corpse at full volume, while their firefight is inaudible, is the wrong way
+   round. */
 export function earshot(P, reach) {
-  if (P === S.me) return 1;
+  if (P === (S.watch || S.me)) return 1;
   return falloff(P.x, P.y, reach || 1500);
 }
 

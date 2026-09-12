@@ -10,7 +10,9 @@
  * the browser: a hidden tab stops calling requestAnimationFrame, which made
  * several "measurements" during development simply wrong. */
 
-import { S, setRole, say, isSquad } from '../src/state.js';
+import {
+  S, setRole, say, isSquad, updateWatch, watched, earX, earY, earshot
+} from '../src/state.js';
 import { CFG, LOADOUT } from '../src/config.js';
 import { A } from '../src/audio.js';
 import {
@@ -897,6 +899,90 @@ section('19. What the squad reported');
   ok('every troop names its own drawing', missing === 0, String(missing));
   ok('and no two share one', Object.keys(arts).length === TROOP_IDS.length,
      `${Object.keys(arts).length} of ${TROOP_IDS.length}`);
+}
+
+/* ============================ 20. SPECTATING ============================
+   Being down used to mean three machines disagreeing about where you were: the
+   camera on a squadmate, the tactical map on your corpse, and the ears on your
+   corpse as well -- so you watched a silent firefight beside a map of an empty
+   street. All three read S.watch now. */
+section('20. Lying on your back, watching somebody else');
+{
+  newMission('plains', { roster: [
+    { id: 0, name: 'ALPHA', load: LOADOUT.slots.slice() },
+    { id: 1, name: 'BRAVO', load: LOADOUT.slots.slice() },
+    { id: 2, name: 'CHARLIE', load: LOADOUT.slots.slice() }
+  ] });
+  S.enemies.length = 0;
+  const A = S.players[0], B = S.players[1], C = S.players[2];
+  A.x = 0; A.y = 0;
+  B.x = 2600; B.y = 0;
+  C.x = 2600; C.y = 900;
+  S.me = A;
+  S.livesLeft = 3;
+
+  updateWatch();
+  ok('on my feet, I am watching myself', watched() === A, watched() && watched().name);
+  ok('...and the ears are on me', Math.round(earX()) === 0, String(Math.round(earX())));
+
+  die(A);
+  A.waiting = 0;                      /* in a squad somebody else makes the call */
+  updateWatch();
+  const first = watched();
+  ok('down, the screen follows somebody who is standing',
+     first === B || first === C, first && first.name);
+  ok('...and so do the ears', Math.round(earX()) === Math.round(first.x),
+     String(Math.round(earX())));
+  ok('...so their rifle is audible', earshot(first) === 1, String(earshot(first)));
+  ok('...and my own corpse is not the loudest thing on the map', earshot(A) < 1,
+     String(earshot(A)));
+
+  /* the camera actually goes there, rather than sitting on the body */
+  run(2.5);
+  ok('the camera travelled to them', Math.abs(S.cam.x - first.x) < 500,
+     String(Math.round(S.cam.x)));
+
+  /* it must not flap between two squadmates every time they cross */
+  const other = first === B ? C : B;
+  let flips = 0, prev = watched();
+  for (let i = 0; i < 240; i++) {
+    /* walk the other one straight through them, which is where a
+       nearest-body rule hands the camera over and then takes it back */
+    other.x = first.x + Math.cos(i / 12) * 700;
+    other.y = first.y + Math.sin(i / 12) * 200;
+    updateWatch();
+    if (watched() !== prev) { flips++; prev = watched(); }
+  }
+  ok('the camera does not flap between squadmates', flips === 0, String(flips) + ' handovers');
+
+  /* ...but it does hand over when the one it is watching goes down */
+  die(first);
+  updateWatch();
+  ok('when they fall, it moves to the next one standing', watched() === other,
+     watched() && watched().name);
+
+  /* on my own drop site, the screen is mine: picking where to land is my job */
+  A.waiting = 8;
+  updateWatch();
+  ok('choosing my own drop site, the screen comes back to me', watched() === A,
+     watched() && watched().name);
+  A.waiting = 0;
+
+  /* back on my feet */
+  S.livesLeft = 3;
+  reinforceAt(A.x, A.y, A);
+  A.inPod = false;
+  updateWatch();
+  ok('called back in, the screen is mine again', watched() === A, watched() && watched().name);
+}
+{
+  /* the Game Master has no body; the ears belong to the camera */
+  newMission('plains', { gm: true });
+  S.me = null;
+  S.cam.x = 1234; S.cam.y = -99;
+  updateWatch();
+  ok('with no Helldiver, the ears are the camera', Math.round(earX()) === 1234 &&
+     Math.round(earY()) === -99, Math.round(earX()) + ',' + Math.round(earY()));
 }
 
 /* ============================ RESULT ============================ */

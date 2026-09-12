@@ -235,6 +235,18 @@ Things that were specifically fixed, since they were the reported problems:
   Worker timer when it is not, and arriving network messages, which browsers deliver on
   time regardless. Measured by blocking the main thread outright: 483ms stalled, 0.483s
   simulated.
+- **The world you are sent is culled around what you are LOOKING at.** Flat on your back
+  watching a squadmate, it used to be culled around your corpse — so spectating was a
+  camera over somebody else's firefight with none of the bodies in it, a tactical map of
+  the empty street you died in, and silence, because this browser's ears were on the
+  corpse too. Camera, map, ears and the host's culling all read one answer now
+  (`S.watch`), and it stays on the same person until they go down rather than switching
+  to whoever is nearest this frame.
+- **The radar sweep reaches the people who earned it.** It promises 3200 units; a joining
+  Helldiver only ever had bodies out to 1300, so the reward did nothing on their screen.
+  While the sweep is up they are sent contacts — a position and a size, nothing else, on
+  a 16-unit grid at a quarter of the snapshot rate. Worst case measured 9.4 KB/s, and
+  only after the squad has held the objective.
 - **Detail scales automatically** to hold the frame rate, and can be pinned to HIGH or
   LOW in the pause menu.
 

@@ -2,7 +2,7 @@
 'use strict';
 import { rand, clamp, TAU } from './util.js';
 import { UI } from './config.js';
-import { S, livingDiver, earX, earY } from './state.js';
+import { S, livingDiver, earX, earY, watched } from './state.js';
 import { G, CELL, gIndex, buildings, rubble, caveDepth } from './world.js';
 import { FACTIONS, SENTRIES, WEAPONS, OBJECTIVES } from './data.js';
 import { sporeLevel } from './objectives.js';
@@ -721,6 +721,12 @@ function drawDiverTag(P) {
     ctx.fillStyle = '#7fd4ff';
     ctx.fillRect(P.x - 16.5, P.y - 26.5, 33 * clamp(P.shield / P.shieldMax, 0, 1), 2);
   }
+  /* somebody standing stock still in a firefight is not ignoring you */
+  if (P.linkDown) {
+    ctx.font = 'bold 9px Consolas';
+    ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillText('LINK LOST', P.x + 1, P.y - 46);
+    ctx.fillStyle = '#ff9d3d'; ctx.fillText('LINK LOST', P.x, P.y - 47);
+  }
 }
 function drawDiver(P) {
   if (P.inPod || P.dead) return;
@@ -1223,7 +1229,7 @@ function drawDarkness(sx, sy, depth) {
     if (P.inPod || P.dead) continue;
     /* Keep the pool well inside the view. At 540 it reached the corners of a
        1024-wide screen and the cave stopped reading as dark at all. */
-    hole(P.x, P.y, P === S.me ? 330 : 250);
+    hole(P.x, P.y, P === watched() ? 330 : 250);
     /* the torch points where you are looking */
     const a = P.ang;
     /* the torch reaches further than the pool, but only where you are looking */
@@ -1262,6 +1268,14 @@ function drawOverlays() {
       : livingDiver(me) ? 'waiting for a squadmate to call ↑↓→←↑'
       : 'no one left standing — emergency redeploy in ' + Math.max(0, Math.ceil(S.wipeT)) + 's',
       S.W / 2, S.H * 0.38 + 24);
+    /* say whose shoulder the camera is over, so the screen showing somebody
+       else's firefight is obviously that and not a glitch */
+    const W = watched();
+    if (W && W !== me) {
+      ctx.font = '12px Consolas';
+      ctx.fillStyle = 'rgba(127,230,160,.85)';
+      ctx.fillText('WATCHING ' + (W.name || 'A HELLDIVER'), S.W / 2, S.H * 0.38 + 44);
+    }
   }
   if (S.toast.t > 0) {
     const inT = clamp((S.toast.max - S.toast.t) / 0.18, 0, 1);

@@ -3,9 +3,12 @@
 'use strict';
 import { el, clamp, TAU, fmtTime } from './util.js';
 import { CFG, LOADOUT, loadoutSave } from './config.js';
-import { S, amGM, isClient, isSquad } from './state.js';
+import { S, amGM, isClient, isSquad, watched } from './state.js';
 import { A } from './audio.js';
-import { STRATS, STRAT_BY_ID, LOADOUT_POOL, WEAPONS, FACTIONS } from './data.js';
+import {
+  STRATS, STRAT_BY_ID, LOADOUT_POOL, WEAPONS, FACTIONS, FACTION_IDS, NETCULL
+} from './data.js';
+const SIZE_OF = ['small', 'medium', 'large'];
 import { W_, A_, loadoutStrats } from './diver.js';
 import { G, CELL, gIndex, inCave } from './world.js';
 import { jammerNear } from './objectives.js';
@@ -173,7 +176,12 @@ export function drawMinimap() {
   const Sz = mmc.width, half = Sz / 2;
   const R = S.mod.radar > 0 ? 3200 : 1700;
   const k = half / R;
-  const ox = S.me ? S.me.x : S.cam.x, oy = S.me ? S.me.y : S.cam.y;
+  /* Centred on what the screen is showing, not on my own body. Spectating a
+     squadmate those were two different places: the map drew the ground around my
+     corpse while the camera watched a firefight elsewhere, and the blips on it
+     were bodies nobody could see. */
+  const W = watched();
+  const ox = W ? W.x : S.cam.x, oy = W ? W.y : S.cam.y;
   mmx.clearRect(0, 0, Sz, Sz);
   mmx.fillStyle = S.map.caves ? 'rgba(14,11,7,.82)' : S.map.city ? 'rgba(10,13,20,.8)' : 'rgba(12,16,12,.8)';
   mmx.fillRect(0, 0, Sz, Sz);
@@ -212,8 +220,15 @@ export function drawMinimap() {
     mmx.stroke(); mmx.setLineDash([]);
   }
 
+  /* A joining Helldiver is only sent bodies out to the cull radius for their
+     size class, and the far tier only every third word. Drawing them all the way
+     out to the edge of the map made the rim twinkle: a ring of contacts blinking
+     in and out that nothing was actually doing. Draw only as far as this machine
+     can be sure of, and let the radar channel cover the rest. */
+  const client = isClient();
   for (const e of S.enemies) {
     if (Math.abs(e.x - ox) > R || Math.abs(e.y - oy) > R) continue;
+    if (client && Math.hypot(e.x - ox, e.y - oy) > NETCULL[e.size] * 0.9) continue;
     const F = FACTIONS[e.fac];
     if (e.size === 'large') {
       mmx.fillStyle = F.hud;
@@ -224,6 +239,20 @@ export function drawMinimap() {
     } else {
       mmx.fillStyle = F.col;
       mmx.fillRect(px(e.x) - 1, py(e.y) - 1, 2, 2);
+    }
+  }
+  /* radar contacts: everything the sweep can see that this machine does not
+     have a body for */
+  if (client && S.radar && S.mod.radar > 0) {
+    for (let i = 0; i < S.radar.length; i += 3) {
+      const bx = S.radar[i] * 16, by = S.radar[i + 1] * 16, kind = S.radar[i + 2];
+      if (Math.hypot(bx - ox, by - oy) <= NETCULL[SIZE_OF[kind & 3]] * 0.9) continue;
+      const F = FACTIONS[FACTION_IDS[kind >> 2]] || FACTIONS.terminid;
+      mmx.fillStyle = (kind & 3) ? F.hud : F.col;
+      mmx.globalAlpha = 0.75;
+      const sz = (kind & 3) === 2 ? 3.4 : (kind & 3) === 1 ? 2.6 : 1.8;
+      mmx.fillRect(px(bx) - sz / 2, py(by) - sz / 2, sz, sz);
+      mmx.globalAlpha = 1;
     }
   }
   for (const s of S.sentries) {
@@ -251,7 +280,7 @@ export function drawMinimap() {
 
   if (!S.gameOver) for (const MP of S.players) {
     if (MP.dead) continue;
-    const hx = px(MP.x), hy = py(MP.y), mine = MP === S.me;
+    const hx = px(MP.x), hy = py(MP.y), mine = MP === (W || S.me);
     mmx.fillStyle = mine ? 'rgba(255,210,30,.18)' : 'rgba(120,230,150,.16)';
     mmx.beginPath();
     mmx.moveTo(hx, hy);
