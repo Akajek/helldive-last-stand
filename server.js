@@ -38,12 +38,16 @@ const server = http.createServer((req, res) => {
 /* ------------------------------------------------------- websocket plumbing */
 let nextId = 1;
 const sockets = new Map();          // id -> conn
-const rooms = new Map();            // code -> {host, clients:[], nextId}
+const rooms = new Map();            // code -> {host, clients:[], nextId, seats:Map}
 const MAX_CLIENTS = 3;              // plus the host = 4 people in a room
+/* How long a seat is held open for somebody whose connection dropped. Long
+   enough to walk back in after a router hiccup or a laptop lid; short enough
+   that a squad is not a body short for the rest of the mission. */
+const HOLD_MS = 120000;
 
 function makeConn(sock) {
   const conn = {id: nextId++, sock, buf: Buffer.alloc(0), room: null, role: null,
-                pid: -1, name: '', alive: true, frag: null, fragOp: 0};
+                pid: -1, name: '', alive: true, frag: null, fragOp: 0, seen: Date.now()};
   sockets.set(conn.id, conn);
   return conn;
 }
@@ -77,17 +81,43 @@ function wsClose(conn) {
         wsSend(c, JSON.stringify({t: 'peerleft', id: 0, host: true}));
         c.room = null;
       }
+      for (const seat of room.seats.values()) if (seat.timer) clearTimeout(seat.timer);
       rooms.delete(conn.room);
       log(`room ${conn.room} closed (host left)`);
     } else {
       const i = room.clients.indexOf(conn);
       if (i >= 0) room.clients.splice(i, 1);
-      const gone = JSON.stringify({t: 'peerleft', id: conn.pid});
-      wsSend(room.host, gone);
-      for (const c of room.clients) wsSend(c, gone);
-      log(`room ${conn.room}: ${conn.name || 'player'} (${conn.pid}) left`);
+      /* The seat is NOT given up yet. A dropped connection is usually a dropped
+         connection, not somebody leaving, and their Helldiver is standing in the
+         middle of a firefight. The host is told to hold the body; if nobody
+         comes back for it inside HOLD_MS the seat is released for real. */
+      const seat = room.seats.get(conn.pid);
+      if (seat && seat.conn === conn) {
+        seat.conn = null;
+        wsSend(room.host, JSON.stringify({t: 'peergone', id: conn.pid, name: conn.name}));
+        const code = conn.room, pid = conn.pid, name = conn.name;
+        seat.timer = setTimeout(() => release(code, pid, name), HOLD_MS);
+        log(`room ${code}: ${name || 'player'} (${pid}) dropped — seat held ${HOLD_MS / 1000}s`);
+      } else {
+        const gone = JSON.stringify({t: 'peerleft', id: conn.pid});
+        wsSend(room.host, gone);
+        for (const c of room.clients) wsSend(c, gone);
+        log(`room ${conn.room}: ${conn.name || 'player'} (${conn.pid}) left`);
+      }
     }
   }
+}
+/* nobody came back: the seat is theirs no longer */
+function release(code, pid, name) {
+  const room = rooms.get(code);
+  if (!room) return;
+  const seat = room.seats.get(pid);
+  if (!seat || seat.conn) return;
+  room.seats.delete(pid);
+  const gone = JSON.stringify({t: 'peerleft', id: pid});
+  wsSend(room.host, gone);
+  for (const c of room.clients) wsSend(c, gone);
+  log(`room ${code}: ${name || 'player'} (${pid}) did not come back — seat released`);
 }
 
 function log(msg) {
@@ -112,7 +142,7 @@ function onMessage(conn, str) {
   if (msg && msg.t === 'host') {
     if (conn.room) return;
     const code = roomCode();
-    rooms.set(code, {host: conn, clients: [], nextId: 1});
+    rooms.set(code, {host: conn, clients: [], nextId: 1, seats: new Map()});
     conn.room = code; conn.role = 'host'; conn.pid = 0;
     conn.name = String(msg.name || 'HOST').slice(0, 14);
     wsSend(conn, JSON.stringify({t: 'hosted', room: code, id: 0}));
@@ -123,16 +153,42 @@ function onMessage(conn, str) {
     const code = String(msg.room || '').toUpperCase().trim();
     const room = rooms.get(code);
     if (!room) { wsSend(conn, JSON.stringify({t: 'error', why: 'No game with that code.'})); return; }
-    if (room.clients.length >= MAX_CLIENTS) {
+
+    /* coming back to a seat we are holding for them */
+    if (msg.resume) {
+      let found = null;
+      for (const seat of room.seats.values())
+        if (seat.token === msg.resume && !seat.conn) found = seat;
+      if (found) {
+        if (found.timer) { clearTimeout(found.timer); found.timer = null; }
+        found.conn = conn;
+        conn.pid = found.pid;
+        conn.name = String(msg.name || found.name).slice(0, 14);
+        found.name = conn.name;
+        room.clients.push(conn);
+        conn.room = code; conn.role = 'client';
+        wsSend(conn, JSON.stringify({t: 'joined', room: code, id: conn.pid,
+                                     token: found.token, resumed: 1}));
+        wsSend(room.host, JSON.stringify({t: 'peer', id: conn.pid, name: conn.name, resumed: 1}));
+        log(`room ${code}: ${conn.name} (${conn.pid}) came back`);
+        return;
+      }
+      /* the hold expired, or this is a different room: fall through and take a
+         fresh seat if there is one going */
+    }
+
+    if (room.seats.size >= MAX_CLIENTS) {
       wsSend(conn, JSON.stringify({t: 'error', why: 'That game is full.'})); return;
     }
     conn.pid = room.nextId++;
     conn.name = String(msg.name || ('DIVER ' + conn.pid)).slice(0, 14);
     room.clients.push(conn);
     conn.room = code; conn.role = 'client';
-    wsSend(conn, JSON.stringify({t: 'joined', room: code, id: conn.pid}));
+    const token = crypto.randomBytes(9).toString('hex');
+    room.seats.set(conn.pid, {pid: conn.pid, name: conn.name, token, conn, timer: null});
+    wsSend(conn, JSON.stringify({t: 'joined', room: code, id: conn.pid, token}));
     wsSend(room.host, JSON.stringify({t: 'peer', id: conn.pid, name: conn.name}));
-    log(`room ${code}: ${conn.name} joined as ${conn.pid} (${room.clients.length}/${MAX_CLIENTS})`);
+    log(`room ${code}: ${conn.name} joined as ${conn.pid} (${room.seats.size}/${MAX_CLIENTS})`);
     return;
   }
   if (msg && msg.t === 'ping') { wsSend(conn, JSON.stringify({t: 'pong', s: msg.s})); return; }
@@ -218,13 +274,38 @@ server.on('upgrade', (req, sock) => {
   sock.setNoDelay(true);
   const conn = makeConn(sock);
   sock.on('data', (chunk) => {
+    conn.seen = Date.now();
     conn.buf = conn.buf.length ? Buffer.concat([conn.buf, chunk]) : chunk;
     if (conn.buf.length > 8 * 1024 * 1024) { wsClose(conn); return; }   // runaway guard
     try { pump(conn); } catch (e) { log('frame error: ' + e.message); wsClose(conn); }
   });
   sock.on('close', () => wsClose(conn));
+  /* An upgraded socket is half-open-capable: when the other end vanishes we get
+     'end' and never 'close', because our side has not been closed. Without this
+     the relay never noticed a disconnect at all -- the host went on addressing
+     snapshots to somebody who had been gone for ten minutes. */
+  sock.on('end', () => wsClose(conn));
   sock.on('error', () => wsClose(conn));
+  sock.on('timeout', () => wsClose(conn));
 });
+
+/* A connection that dies without saying so -- a laptop lid, a dropped Wi-Fi --
+   sends no FIN at all, so nothing above ever fires. Ping everybody; anything
+   that has not made a sound in HEARTBEAT_DEAD is gone. */
+const HEARTBEAT = 15000, HEARTBEAT_DEAD = 45000;
+setInterval(() => {
+  const now = Date.now();
+  for (const conn of Array.from(sockets.values())) {
+    if (!conn.alive) continue;
+    if (now - conn.seen > HEARTBEAT_DEAD) {
+      log(`dropping silent connection ${conn.name || conn.id}`);
+      wsClose(conn);
+      continue;
+    }
+    const head = Buffer.alloc(2); head[0] = 0x89; head[1] = 0;   // ping, no payload
+    try { conn.sock.write(head); } catch (e) { wsClose(conn); }
+  }
+}, HEARTBEAT).unref();
 
 server.listen(PORT, () => {
   console.log('');

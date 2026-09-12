@@ -16,7 +16,7 @@ import { evPlay, capeInit, capeUpdate } from './events.js';
 import { NET, netSend, LOBBY } from './net.js';
 import {
   STRATS, STRAT_BY_ID, TROOPS, TROOP_IDS, SIZE, SLOTW, SENTRIES, PROJ, OBJECTIVES,
-  ANG8, NETCULL, NETNEAR
+  FACTION_IDS, ANG8, NETCULL, NETNEAR
 } from './data.js';
 import { buildMap, killCell, restoreCell, resolveCircle } from './world.js';
 import { makeDiver, W_, A_ } from './diver.js';
@@ -34,20 +34,26 @@ import { CODE } from './hud.js';
    drawn to where the host says it is, arriving exactly as the next word lands.
    An exponential chase never arrives at all -- it trails by a fraction of the
    gap forever, which is what makes networked movement look syrupy. */
-export function lerpTo(o, x, y, z) {
+export function lerpTo(o, x, y, z, gap) {
   o.ix = o.x; o.iy = o.y; o.iz = o.z || 0;
   o.tx = x; o.ty = y; o.tz = (z === undefined ? o.z || 0 : z);
   o.lt = 0;
+  /* How long this hop is supposed to take. Most things arrive every snapshot
+     and use the snapshot gap; a body in the far tier is only mentioned every
+     third word, and lerping it over one gap makes it sprint, stop, sprint,
+     stop. */
+  o.lg = gap || 0;
 }
 export function lerpAt(o, x, y, z) {
   o.x = o.ix = o.tx = x; o.y = o.iy = o.ty = y;
   o.z = o.iz = o.tz = (z === undefined ? 0 : z);
-  o.lt = 0;
+  o.lt = 0; o.lg = 0;
 }
 export function lerpStep(o, dt) {
   if (o.lt === undefined) return;
   o.lt += dt;
-  const a = NET.snapGap > 0.001 ? clamp(o.lt / NET.snapGap, 0, 1) : 1;
+  const gap = o.lg || NET.snapGap;
+  const a = gap > 0.001 ? clamp(o.lt / gap, 0, 1) : 1;
   o.x = o.ix + (o.tx - o.ix) * a;
   o.y = o.iy + (o.ty - o.iy) * a;
   if (o.tz !== undefined) o.z = o.iz + (o.tz - o.iz) * a;
@@ -66,7 +72,7 @@ function netKeep(list, map, arr, stride, make, update) {
   for (let j = list.length - 1; j >= 0; j--)
     if (!seen[list[j].nid]) { delete map[list[j].nid]; list.splice(j, 1); }
 }
-const M = { st: {}, pd: {}, bl: {}, nd: {}, dr: {}, pk: {}, ob: {}, en: {} };
+const M = { st: {}, pd: {}, bl: {}, nd: {}, dr: {}, pk: {}, ob: {}, br: {}, en: {} };
 export function clearMaps() { for (const k in M) M[k] = {}; }
 
 /* ============================ ARRIVING ============================ */
@@ -117,9 +123,11 @@ export function clientSnap(m) {
   const now = performance.now();
   NET.snapGap = clamp((now - NET.lastSnap) / 1000, 0.03, 0.4);
   NET.lastSnap = now;
+  NET.tick++;              /* counts words received, so a staggered body knows */
 
   S.time = m.tm / 10; S.hordeLv = m.lv; S.kills = m.ki; S.nextRebuild = m.rb;
   S.wave = m.wv || 0; S.waveT = m.wt || 0;
+  if (m.wf) S.waveFacs = m.wf.map(i => FACTION_IDS[i]).filter(Boolean);
   S.livesLeft = m.rf;
   if (m.md) {
     S.mod.confuse = m.md[0]; S.mod.radar = m.md[1];
@@ -191,12 +199,25 @@ export function clientSnap(m) {
       if (!e) {
         e = clientEnemy(id, m.e[i + 1]);
         lerpAt(e, m.e[i + 2], m.e[i + 3]);
-        e.face = m.e[i + 4] / ANG8; e.aim = e.face;
+        e.face = m.e[i + 4] / ANG8; e.aim = e.face; e.faceT = e.face;
         M.en[id] = e; S.enemies.push(e);
       }
-      lerpTo(e, m.e[i + 2], m.e[i + 3]);
-      e.face = m.e[i + 4] / ANG8;
-      e.cdir = e.face;
+      /* How long since this body was last mentioned. Past NETNEAR the host only
+         refreshes the small and medium classes every third snapshot, so the hop
+         it is describing covers three gaps, not one. */
+      const since = e.seenTick ? Math.max(1, NET.tick - e.seenTick) : 1;
+      e.seenTick = NET.tick;
+      const gap = NET.snapGap * Math.min(3, since);
+      /* Velocity is not on the wire -- it is the hop divided by the time it is
+         given. Without it every remote body reads as standing still, and a
+         joining Helldiver gets no footfalls, no dust and no stomp from a Titan
+         walking past them. */
+      e.vx = (m.e[i + 2] - e.x) / gap; e.vy = (m.e[i + 3] - e.y) / gap;
+      lerpTo(e, m.e[i + 2], m.e[i + 3], undefined, gap);
+      /* the host's facing is a byte; easing towards it stops the turn reading as
+         a series of small teleports */
+      e.faceT = m.e[i + 4] / ANG8;
+      e.cdir = e.faceT;
       e.max = 100; e.hp = m.e[i + 5];
       const w = m.e[i + 6], fl = w & 255;
       e.hit = (fl & 1) ? 0.1 : 0; e.wind = (fl & 2) ? 0.4 : 0; e.cw = (fl & 4) ? 0.4 : 0;
@@ -265,6 +286,16 @@ export function clientSnap(m) {
     nid: a[i], x: a[i + 1], y: a[i + 2], ang: a[i + 3] / 57.2958, owner: a[i + 4],
     orbit: 0, cool: 0
   }), (o, a, i) => { lerpTo(o, a[i + 1], a[i + 2]); o.ang = a[i + 3] / 57.2958; });
+
+  if (m.br) netKeep(S.beamRuns, M.br, m.br, 8, (a, i) => ({
+    nid: a[i], x: a[i + 1], y: a[i + 2], px: a[i + 3], py: a[i + 4],
+    t: a[i + 5] / 10, dur: a[i + 6], r: a[i + 7], ang: 0, who: -1
+  }), (o, a, i) => {
+    /* the head is eased rather than jumped, or it stutters between snapshots */
+    o.px += (a[i + 3] - o.px) * 0.5; o.py += (a[i + 4] - o.py) * 0.5;
+    o.t = a[i + 5] / 10;
+  });
+  else if (S.beamRuns.length) { S.beamRuns.length = 0; M.br = {}; }
 
   if (m.ob) netKeep(S.objectives, M.ob, m.ob, 8, (a, i) => {
     const id = OBJIDX[a[i + 1]] || 'upload';
@@ -363,13 +394,20 @@ export function updateClient(dt) {
 
   /* interpolation */
   for (const e of S.enemies) {
+    const wx = e.x, wy = e.y;
     lerpStep(e, dt);
     if (e.zT !== undefined) e.z += (e.zT - e.z) * ease(8, dt);
-    if (e.face !== undefined) {
-      e.aim = angLerp(e.aim === undefined ? e.face : e.aim, e.face, ease(11, dt));
-      e.vx = Math.cos(e.aim) * 40; e.vy = Math.sin(e.aim) * 40;
-      e.cdir = e.aim;
-    }
+    /* How far it actually moved on THIS screen this frame. The footfall and dust
+       code runs from this, so it has to be the real thing: it used to be a
+       constant forty units in whatever direction the body was facing, which gave
+       a sprinting Hunter and a Bile Titan the same plodding cadence. */
+    e.moved = Math.hypot(e.x - wx, e.y - wy);
+    /* vx/vy stay as the snapshot worked them out -- hop over the time the hop
+       was given. Recomputing them per frame reads a correction or a teleport as
+       a body moving at seven hundred units a second, and the dust goes with it. */
+    if (e.faceT !== undefined)
+      e.face = angLerp(e.face, e.faceT, ease(14, dt));
+    e.aim = e.face; e.cdir = e.face;
     e.t += dt; e.hit -= dt; e.clang -= dt;
   }
   for (const p of S.pods) lerpStep(p, dt);

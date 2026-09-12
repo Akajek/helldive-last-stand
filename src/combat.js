@@ -174,8 +174,21 @@ export function die(P) {
   }
   P.support = null;
   P.wep = 'ar';
+  /* The pack goes down with the body. A Guard Dog that kept flying over the
+     crater and rejoined its owner on the next drop was the clearest sign that
+     dying cost nothing -- and it is recoverable, because the pack is lying
+     right there where you fell. */
+  for (let i = S.drones.length - 1; i >= 0; i--) {
+    if (S.drones[i].owner !== P.id) continue;
+    S.drones.splice(i, 1);
+    S.pickups.push({ nid: nid(), kind: 'dog', x: P.x + rand(-26, 26),
+                     y: P.y + rand(-26, 26), bob: rand(0, 6) });
+  }
+  if (P.shieldMax > 0)
+    S.pickups.push({ nid: nid(), kind: 'shield', x: P.x + rand(-26, 26),
+                     y: P.y + rand(-26, 26), bob: rand(0, 6) });
   P.down = true; P.inPod = true; P.hp = 1; P.downAt = S.time;
-  P.shield = 0;
+  P.shield = 0; P.shieldMax = 0;
   S.deaths++;
   if (HOOKS.onDiverDown) HOOKS.onDiverDown(P);
 

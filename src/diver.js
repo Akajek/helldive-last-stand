@@ -55,6 +55,13 @@ export function hasStrat(P, s) {
   if (s.free || s.hidden) return true;
   return P.load.indexOf(s.id) >= 0;
 }
+/* is this Helldiver standing at a Requisition terminal */
+export function atTerminal(P) {
+  if (!P) return false;
+  for (const p of S.pickups)
+    if (p.kind === 'requisition' && Math.hypot(p.x - P.x, p.y - P.y) < 90) return true;
+  return false;
+}
 export function loadoutStrats(P) {
   const out = [];
   for (const s of STRATS) if (s.free && !s.hidden) out.push(s);
@@ -270,7 +277,11 @@ export function tryPickup(P) {
     worldEv('pickup', P.x, P.y);
     if (P === S.me) say('GUARD DOG DEPLOYED', 2.5);
   } else if (p.kind === 'requisition') {
-    if (LOADHOOK.open) LOADHOOK.open();
+    /* A terminal opens a screen, and a screen belongs to the machine sitting in
+       front of it. This runs on the host for everybody's E key, so opening it
+       here for a joining Helldiver opened the loadout on the HOST'S monitor and
+       did nothing at all on theirs. They open their own; see main.js. */
+    if (P === S.me && LOADHOOK.open) LOADHOOK.open();
     return;                             /* the terminal stays where it is */
   } else {
     resupply(P);

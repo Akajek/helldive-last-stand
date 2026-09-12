@@ -29,7 +29,9 @@ import {
   throwStratagem, callIn, dropPod, superDestroyer, placeSentry, jammedAt, reinforceAt
 } from '../src/strat.js';
 import { explode, hurt, die, damageEnemy, arcChain } from '../src/combat.js';
-import { giveSupport, fire, W_, A_, tryPickup, useStim, throwNade, meleeSwing } from '../src/diver.js';
+import {
+  giveSupport, fire, W_, A_, tryPickup, useStim, throwNade, meleeSwing, atTerminal
+} from '../src/diver.js';
 import { GM, gmReset } from '../src/gm.js';
 
 /* ------------------------------------------------------------------ harness */
@@ -756,6 +758,145 @@ section('18. Nothing grows without bound over a long mission');
   ok('timers bounded', peak.timers < 200, String(peak.timers));
   ok('pickups bounded', peak.pickups < 200, String(peak.pickups));
   ok('objectives bounded', peak.objectives <= 2, String(peak.objectives));
+}
+
+/* ============================ 19. THE COOP ROUND ============================
+   Everything in this section is something that went wrong in a real match. */
+section('19. What the squad reported');
+{
+  /* ---- the horde forgot about the Helldivers entirely ---- */
+  newMission('plains');
+  S.enemies.length = 0;
+  const P0 = S.players[0];
+  P0.x = 0; P0.y = 0; P0.hp = 1e6; P0.maxhp = 1e6;
+  for (let i = 0; i < 40; i++) spawnEnemy('scavenger', { x: 300 + (i % 8) * 30, y: -200 + ((i / 8) | 0) * 40 });
+  for (let i = 0; i < 40; i++) spawnEnemy('trooper', { x: 500 + (i % 8) * 30, y: -200 + ((i / 8) | 0) * 40 });
+  run(3);
+  let onDiver = 0, onFoe = 0;
+  for (const e of S.enemies) {
+    if (!e.tgt) continue;
+    if (e.tgt.kind === 'diver') onDiver++;
+    else if (e.tgt.kind === 'enemy') onFoe++;
+  }
+  line(`  with two factions on the field: ${onDiver} hunting the squad, ${onFoe} brawling`);
+  ok('the horde still comes for the Helldivers', onDiver > S.enemies.length * 0.3,
+     `${onDiver}/${S.enemies.length}`);
+  ok('...and some of them still fight each other', onFoe > 4, String(onFoe));
+
+  /* ---- a Helldiver standing right there outranks the brawl ---- */
+  S.enemies.length = 0;
+  const near = spawnEnemy('scavenger', { x: 200, y: 0 });
+  spawnEnemy('trooper', { x: 260, y: 0 });      /* a foe closer than the diver */
+  near.brawl = 1;                               /* the worst case: it wants to brawl */
+  run(1);
+  ok('a Helldiver within arm’s reach is the priority',
+     near.tgt && near.tgt.kind === 'diver', near.tgt && near.tgt.kind);
+}
+{
+  /* ---- one faction per wave, when the point was to watch them meet ---- */
+  newMission('plains');
+  const seen = {};
+  let multi = 0, waves = 0;
+  for (let w = 0; w < 24; w++) {
+    DIR.waveT = 0;
+    run(0.1);
+    waves++;
+    if (S.waveFacs.length > 1) multi++;
+    for (const f of S.waveFacs) seen[f] = 1;
+    S.enemies.length = 0;
+    DIR.queue.length = 0;
+  }
+  line(`  ${multi}/${waves} waves drew more than one faction`);
+  ok('most waves are a collision, not a queue', multi > waves * 0.6, `${multi}/${waves}`);
+  ok('all three factions turn up', Object.keys(seen).length === 3, Object.keys(seen).join(','));
+}
+{
+  /* ---- the orbital laser drew circles in an empty street ---- */
+  newMission('plains');
+  S.enemies.length = 0;
+  const mob = [];
+  for (let i = 0; i < 8; i++)
+    mob.push(spawnEnemy('warrior', { x: 260 + (i % 4) * 40, y: 180 + ((i / 4) | 0) * 40 }));
+  callIn({ strat: STRAT_BY_ID.orblaser, x: 0, y: 0, who: 0 });
+  ok('the laser is on the field', S.beamRuns.length === 1);
+  const B = S.beamRuns[0];
+  ok('it has a net id, so a joining Helldiver can be told about it', B.nid > 0);
+  run(0.45);
+  /* the head should be on its way to the pack, not orbiting the beacon it was
+     thrown at -- which is exactly what it used to do while the horde watched */
+  const fromBeacon = Math.hypot(B.px - B.x, B.py - B.y);
+  const aim = Math.atan2(B.py, B.px), toPack = Math.atan2(220, 320);
+  const off = Math.abs(((aim - toPack + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+  line(`  after 0.45s the head is ${Math.round(fromBeacon)} units from the beacon, ` +
+       `${Math.round(off * 57.3)} deg off the pack`);
+  ok('it leaves the beacon', fromBeacon > 80, String(Math.round(fromBeacon)));
+  ok('and it goes towards the horde', off < 0.6, String(Math.round(off * 57.3)) + ' deg');
+  run(2);
+  ok('it killed what it walked to', mob.filter(e => S.enemies.includes(e)).length === 0,
+     String(mob.filter(e => S.enemies.includes(e)).length));
+  run(7);
+  ok('and it ends', S.beamRuns.length === 0);
+}
+{
+  /* ---- dying with a Guard Dog and coming back with it ---- */
+  newMission('plains');
+  S.enemies.length = 0;
+  const P = S.players[0];
+  S.drones.push({ nid: 999, owner: P.id, x: P.x, y: P.y, ang: 0, orbit: 0, cool: 0 });
+  P.shieldMax = 240; P.shield = 240;
+  die(P);
+  ok('the dog does not follow you into the crater', S.drones.length === 0, String(S.drones.length));
+  ok('the pack is lying where you fell',
+     S.pickups.some(p => p.kind === 'dog') && S.pickups.some(p => p.kind === 'shield'));
+  ok('and the shield is gone with it', P.shieldMax === 0);
+  S.livesLeft = 3;
+  reinforceAt(P.x, P.y, P);
+  run(3);
+  const mine = S.drones.filter(d => d.owner === P.id).length;
+  ok('you come back without it', mine === 0, String(mine));
+}
+{
+  /* ---- the Requisition terminal was a screen on the host's monitor ---- */
+  newMission('plains');
+  const P = S.players[0];
+  ok('no terminal, no screen', !atTerminal(P));
+  S.pickups.push({ nid: 1, kind: 'requisition', x: P.x + 40, y: P.y, bob: 0 });
+  ok('standing at one is recognised', atTerminal(P));
+  S.pickups[S.pickups.length - 1].x = P.x + 400;
+  ok('four hundred units away is not', !atTerminal(P));
+}
+{
+  /* ---- a Helldiver whose link dropped is not lunch ---- */
+  newMission('plains', { roster: [
+    { id: 0, name: 'ALPHA', load: LOADOUT.slots.slice() },
+    { id: 1, name: 'BRAVO', load: LOADOUT.slots.slice() }
+  ] });
+  S.enemies.length = 0;
+  const A0 = S.players[0], B0 = S.players[1];
+  A0.x = 4000; A0.y = 4000;
+  B0.x = 0; B0.y = 0;
+  B0.linkDown = 1;
+  const e = spawnEnemy('scavenger', { x: 150, y: 0 });
+  run(1.5);
+  ok('nothing hunts a body whose player dropped off the wire',
+     !(e.tgt && e.tgt.kind === 'diver' && e.tgt.ref === B0), e.tgt && e.tgt.kind);
+  B0.linkDown = 0;
+  run(1.5);
+  ok('...and it is a target again the moment they are back',
+     !!(e.tgt && e.tgt.kind === 'diver' && e.tgt.ref === B0), e.tgt && e.tgt.kind);
+}
+{
+  /* ---- they all looked the same ---- */
+  const arts = {};
+  let missing = 0;
+  for (const id of TROOP_IDS) {
+    const a = TROOPS[id].art;
+    if (!a) { missing++; continue; }
+    arts[a] = (arts[a] || 0) + 1;
+  }
+  ok('every troop names its own drawing', missing === 0, String(missing));
+  ok('and no two share one', Object.keys(arts).length === TROOP_IDS.length,
+     `${Object.keys(arts).length} of ${TROOP_IDS.length}`);
 }
 
 /* ============================ RESULT ============================ */

@@ -19,7 +19,7 @@ export const S = {
   W: 0, H: 0, cam: { x: 0, y: 0 }, camKick: { x: 0, y: 0 }, shake: 0,
   /* ---- clock ---- */
   time: 0, dt: 0.016, running: false, paused: false, gameOver: false,
-  hordeLv: 1, wave: 0, waveT: 0, kills: 0, deaths: 0,
+  hordeLv: 1, wave: 0, waveT: 0, kills: 0, deaths: 0, waveFacs: [],
   /* ---- map ---- */
   map: MAPS.plains, world: 6000,
   /* ---- roster ---- */
@@ -55,10 +55,13 @@ export function diverById(id) {
 export function eachDiver(fn) {
   for (const P of S.players) { if (P.inPod || P.dead) continue; fn(P); }
 }
+/* A Helldiver whose player has dropped off the wire is still standing there, but
+   nothing hunts them and nothing shoots at them: the relay is holding the seat
+   and they cannot run. Being eaten while your router reboots is not a fight. */
 export function nearestDiver(x, y) {
   let best = null, bd = Infinity;
   for (const P of S.players) {
-    if (P.inPod || P.dead) continue;
+    if (P.inPod || P.dead || P.linkDown) continue;
     const d = Math.hypot(P.x - x, P.y - y);
     if (d < bd) { bd = d; best = P; }
   }

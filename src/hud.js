@@ -47,6 +47,10 @@ export function hud() {
   bits.push('KILLS ' + S.kills);
   if (!S.gmMatch) {
     bits.push('WAVE ' + Math.max(1, S.wave) + ' in ' + Math.max(0, Math.ceil(S.waveT)) + 's');
+    /* who this minute belongs to -- two names means they are about to run into
+       each other on the way to you */
+    if (S.waveFacs && S.waveFacs.length)
+      bits.push(S.waveFacs.map(f => FACTIONS[f].short).join(' vs '));
   }
   bits.push('LV ' + S.hordeLv);
   bits.push('HOSTILES ' + S.enemies.length);

@@ -4,7 +4,7 @@ import { el, fmtTime } from './util.js';
 import {
   CFG, PRESETS, UI, VOL, LOADOUT, uiSave, volSave, cfgSave, myName, activeFactions
 } from './config.js';
-import { S, amGM, setRole, role, isHost, isClient, say, isSquad } from './state.js';
+import { S, amGM, setRole, role, isHost, isClient, say, isSquad, diverById } from './state.js';
 import {
   A, SFX, audioInit, applyVolume, setMuted, refillBudget, musicStart, musicStop,
   musicToggle, musicApplyVolume, useExternalTrack, probeExternalTrack, musicSchedule
@@ -15,7 +15,8 @@ import { worldEv } from './events.js';
 import { bindFlash, hurt } from './combat.js';
 import { spawnEnemy } from './enemies.js';
 import {
-  reload, tryPickup, throwNade, meleeSwing, useStim, equipSlot, loadoutStrats, LOADHOOK
+  reload, tryPickup, throwNade, meleeSwing, useStim, equipSlot, loadoutStrats, atTerminal,
+  LOADHOOK
 } from './diver.js';
 import { throwStratagem, reinforceAt } from './strat.js';
 import {
@@ -28,7 +29,7 @@ import {
 import {
   NET, LOBBY, LOBBYUI, NETHOOK, CFGHOOK, netOpen, netQuit, netSend, netAct, netStatus,
   lobbyBroadcast, lobbySetMode, lobbyWant, lobbyCount, lobbyLocked, lobbyClose,
-  setMyName, sendMyLoadout, NETWAKE
+  setMyName, sendMyLoadout, NETWAKE, NETLOAD
 } from './net.js';
 import { netSnapshot, netSendCity, netSendOver, hostInput } from './host.js';
 import {
@@ -116,7 +117,9 @@ addEventListener('keydown', e => {
 
   if (isClient()) {
     if (k === 'r') netAct('r');
-    if (k === 'e') netAct('e');
+    /* the terminal is a screen on THIS machine; everything else E does is the
+       host's to carry out */
+    if (k === 'e') { if (atTerminal(S.me)) openLoadout(true); else netAct('e'); }
     if (k === 'g') netAct('g');
     if (k === 'f' || k === 'v') { netAct('f'); if (S.me) { S.me.melee = 0.24; SFX.swing(); } }
     if (k === 'q') netAct('q');
@@ -175,10 +178,7 @@ function onClick() {
 function openLoadout(inMission) {
   /* mid-mission it is only available at a Requisition terminal */
   if (inMission) {
-    let near = false;
-    for (const p of S.pickups)
-      if (p.kind === 'requisition' && S.me && Math.hypot(p.x - S.me.x, p.y - S.me.y) < 90) near = true;
-    if (!near) {
+    if (!atTerminal(S.me)) {
       say('NO REQUISITION TERMINAL — CALL ONE WITH  ←↓→↑↓', 3);
       SFX.fail();
       return;
@@ -204,6 +204,13 @@ function closeLoadout() {
   el('loadscreen').className = '';
 }
 LOADHOOK.open = () => openLoadout(true);
+/* somebody in the squad swapped their four at a terminal: hand them to the body
+   the host is simulating, and remember it for the next round */
+NETLOAD.apply = (id, slots) => {
+  const P = diverById(id);
+  if (P) P.load = slots.slice();
+  if (NET.roster) for (const r of NET.roster) if (r.id === id) r.load = slots.slice();
+};
 el('loadclose').onclick = closeLoadout;
 el('loadopen').onclick = () => openLoadout(false);
 el('loadopen2').onclick = () => openLoadout(false);
@@ -276,6 +283,27 @@ function netToMenu(title, body) {
 }
 NETHOOK.toMenu = netToMenu;
 NETHOOK.input = hostInput;
+/* ---- somebody's link dropped, and somebody's link came back ---- */
+NETHOOK.linkdown = (id, name) => {
+  const P = diverById(id);
+  if (!P) return;
+  P.linkDown = 1;
+  /* their hands come off the controls: no walking, no firing, no throwing */
+  const IN = P.inp;
+  IN.ax = P.x; IN.ay = P.y;
+  IN.U = IN.D = IN.L = IN.R = 0; IN.sprint = false; IN.fire = false;
+  P.armed = null;
+  if (S.running) say((name || P.name || 'A HELLDIVER') + ' LOST LINK — HOLDING THE BODY', 4);
+};
+NETHOOK.rejoin = (id, name) => {
+  const P = diverById(id);
+  if (P) P.linkDown = 0;
+  if (S.running) {
+    /* hand them the world back: the map seed, the roster, the state of play */
+    netSendCity(id);
+    say((name || (P && P.name) || 'A HELLDIVER') + ' IS BACK', 3);
+  } else lobbyBroadcast();
+};
 NETHOOK.city = m => {
   pauseClose();
   audioInit();

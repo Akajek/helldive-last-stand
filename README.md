@@ -187,6 +187,21 @@ Whoever hosts gets a 4-character room code; up to three more join with it. The h
 the mode, the mission settings and every slot's role. Everyone's chosen loadout shows in
 the slot list so you can see what the squad is bringing.
 
+**If your connection drops mid-mission you have two minutes to get back.** The relay
+holds your seat, the host holds your Helldiver — standing still, and nothing hunts them
+while you are gone — and the game walks back in on its own, up to fourteen attempts on a
+lengthening delay, then hands you the world again. You come back as the same Helldiver
+with the same kit, not as a new one. The seat is not given to anybody else while it is
+being held. (The host leaving still ends the room; there is nowhere for the mission to
+go without the machine that is running it.)
+
+## Requisition, mid-mission
+
+`L` at a **Requisition terminal** — call one down with `←↓→↑↓`, it does not take a slot —
+swaps your four for anything in the pool. It opens on *your* screen, applies to your
+Helldiver immediately on the host, and the cooldown on anything you drop is kept, so
+swapping is not a way to reset a spent stratagem.
+
 ## Mission settings
 
 Presets: **SWARM**, **ELITE**, **BOTH**, **FLAT**, and **TOTAL WAR**. Underneath: which
@@ -250,16 +265,20 @@ as an argument.
 npm test
 ```
 
-Runs three suites, none of which need a browser:
+Runs four suites, none of which need a browser:
 
 - **`test/run.mjs`** — the real simulation, headless. Twenty minutes on every map, every
   stratagem, every weapon, every sentry, armour, infighting, all seven objectives, the
   cave uplink, the squad wipe and reinforcement rules, a five-hundred-body stress test,
-  and leak checks. ~228 assertions in about twelve seconds.
+  and leak checks. ~270 assertions in about twelve seconds.
 - **`test/net.mjs`** — the host builds a real snapshot, the client consumes it, and the
   two worlds are compared field by field. Also checks input travelling back and
   bandwidth under load.
-- **`test/imports.mjs`** — every named import resolves to a real export.
+- **`test/relay.mjs`** — starts `server.js` on a spare port and talks to it over real
+  sockets: room codes, addressed messages, and the seat-holding that lets somebody whose
+  connection dropped walk back into the same body.
+- **`test/imports.mjs`** — every named import resolves to a real export, and no module
+  calls a function it forgot to import.
 
 The harness exists because testing the old build meant staring at a browser, and a
 hidden tab stops calling `requestAnimationFrame` — which made several measurements

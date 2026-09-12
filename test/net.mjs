@@ -26,7 +26,7 @@ import { NET, LOBBY } from '../src/net.js';
 import { OUT, post, postArr } from '../src/outbox.js';
 import { netSnapshot, netSendCity, hostInput } from '../src/host.js';
 import { clientCity, clientSnap, updateClient, clearMaps } from '../src/client.js';
-import { placeSentry, dropPod, placeSentry as _ps } from '../src/strat.js';
+import { placeSentry, dropPod, callIn } from '../src/strat.js';
 import { fire, giveSupport } from '../src/diver.js';
 import { explode } from '../src/combat.js';
 import { GM, gmReset } from '../src/gm.js';
@@ -402,6 +402,84 @@ section('8. A far body the host skipped this tick is not deleted');
      !S.enemies.some(e => e.id === near.id), 'it survived');
 }
 
+
+
+section('9. The orbital laser, and bodies that actually move');
+{
+  /* Two things a joining Helldiver was never told. The laser was host-only
+     state, so their screen showed the siren and then nothing at all while
+     something cut the street in half. And every remote body arrived with a
+     velocity of "forty units, that way", so nothing walked: no footfalls, no
+     dust, a Bile Titan crossing the road in silence. */
+  setRole('host');
+  NET.peers = [{ id: 1 }];
+  NETIN.roster = NET.roster; NETIN.myId = 0;
+  buildMap('plains', 11);
+  reset();
+  S.running = true;
+  S.pods.length = 0;
+  for (const P of S.players) { P.inPod = false; P.guard = 0; }
+  S.enemies.length = 0;
+  S.players.find(P => P.id === 0).x = 0;
+  const B9 = S.players.find(P => P.id === 1);
+  B9.x = 0; B9.y = 0;
+
+  const walker = spawnEnemy('warrior', { x: 300, y: 0 });
+  /* the beacon goes down a long way from the walker: a laser that reaches it
+     simply deletes it, and then there is nothing left to measure */
+  callIn({ strat: STRAT_BY_ID.orblaser, x: 1500, y: -1200, who: 0 });
+  run(0.6);
+  const hostRun = S.beamRuns[0];
+  ok('the host has a laser running', !!hostRun);
+
+  sent.length = 0;
+  netSnapshot();
+  const m1 = sent[0].msg;
+  ok('the laser is on the wire', !!m1.br && m1.br.length === 8, m1.br ? String(m1.br.length) : 'absent');
+  ok('...with the cutting head, not just the beacon',
+     Math.abs(m1.br[3] - Math.round(hostRun.px)) <= 1 &&
+     Math.abs(m1.br[4] - Math.round(hostRun.py)) <= 1,
+     JSON.stringify(m1.br.slice(1, 5)));
+
+  /* let the walker cover one snapshot's worth of ground, and catch the word
+     that describes it */
+  run(1 / 12);
+  sent.length = 0;
+  netSnapshot();
+  const m2 = sent[0].msg;
+  const hostSpeed = Math.hypot(walker.vx, walker.vy);
+
+  LOBBY.myId = 1;
+  clientCity({ t: 'city', map: 'plains', seed: 11, lv: 1, cfg: CFG, rs: NET.roster, gm: 0, lives: 5 });
+  clientSnap(m1);
+  ok('the client built the laser', S.beamRuns.length === 1, String(S.beamRuns.length));
+  const cRun = S.beamRuns[0];
+  ok('and it is burning the ground the word described',
+     Math.hypot(cRun.px - m1.br[3], cRun.py - m1.br[4]) < 2,
+     String(Math.round(Math.hypot(cRun.px - m1.br[3], cRun.py - m1.br[4]))));
+
+  /* the client works speed out from how long the hop was given, which is the
+     gap between words arriving -- so the test has to space them like the wire */
+  NET.lastSnap = performance.now() - 1000 / 12;
+  clientSnap(m2);
+  const cWalk = S.enemies.find(e => e.id === walker.id);
+  ok('the client has the walking body', !!cWalk);
+  /* one frame of the client's own loop is what turns two snapshots into motion */
+  updateClient(1 / 60);
+  const speed = cWalk ? Math.hypot(cWalk.vx, cWalk.vy) : 0;
+  line('  remote body speed on the client: ' + Math.round(speed) + ' u/s (host: ' +
+       Math.round(hostSpeed) + ' u/s)');
+  ok('a remote body moves at something like its real speed',
+     speed > hostSpeed * 0.5 && speed < hostSpeed * 2,
+     Math.round(speed) + ' vs ' + Math.round(hostSpeed));
+
+  /* the host ends it; the client must let it go too */
+  const gone = JSON.parse(JSON.stringify(m2));
+  gone.br = [];
+  clientSnap(gone);
+  ok('when the host is done with it, so is the client', S.beamRuns.length === 0,
+     String(S.beamRuns.length));
+}
 
 console.log('\n' + '─'.repeat(60));
 if (failures.length) {

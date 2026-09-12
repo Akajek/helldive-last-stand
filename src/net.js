@@ -14,13 +14,20 @@ export const NET = {
   acc: 0, rate: 1 / 12, inAcc: 0, inRate: 1 / 20, actions: [],
   lastSnap: 0, snapGap: 0.083, tick: 0,
   mapId: 'megacity', seed: 1, roster: null, hostPaused: false,
-  peers: []                    /* [{id, name}] -- who the host is talking to */
+  peers: [],                   /* [{id, name}] -- who the host is talking to */
+  /* ---- coming back after a drop ---- */
+  token: '', tries: 0, retry: null, resuming: false
 };
+/* How hard we try to get back in. The relay holds the seat for two minutes; this
+   walks up to it and gives up a little before, so the player is told the seat is
+   gone rather than watching a spinner that will never finish. */
+const RETRY_MAX = 14;
+function retryDelay(n) { return Math.min(6000, 800 + n * 700); }
 export const LOBBY = { mode: 'gm', slots: [], myId: -1 };
 
 export const NETHOOK = {
   city: null, snap: null, over: null, input: null,
-  toMenu: null, start: null
+  toMenu: null, start: null, rejoin: null, linkdown: null
 };
 
 export function netURL() {
@@ -52,10 +59,21 @@ export function netOpen(mode, code, mapId) {
   NET.mapId = mapId || NET.mapId;
   ws.onopen = () => {
     if (mode === 'host') netSend({ t: 'host', name: myName() });
-    else netSend({ t: 'join', room: String(code || '').toUpperCase(), name: myName() });
+    else netSend({ t: 'join', room: String(code || '').toUpperCase(), name: myName(),
+                   resume: NET.resuming ? NET.token : undefined });
   };
-  ws.onerror = () => netStatus('could not reach the relay — is server.js running?', true);
+  ws.onerror = () => {
+    if (!NET.resuming) netStatus('could not reach the relay — is server.js running?', true);
+  };
   ws.onclose = () => {
+    if (NET.ws && NET.ws !== ws) return;          /* an old socket we replaced */
+    /* A joining Helldiver whose link drops mid-mission is not out of the game:
+       the relay holds their seat and their body keeps standing there. Walk back
+       in rather than throwing them to the menu. */
+    if (role() === 'client' && NET.token && NET.tries < RETRY_MAX) {
+      netRetry();
+      return;
+    }
     if (role() !== 'solo') {
       netStatus('connection lost', true);
       if (NETHOOK.toMenu) NETHOOK.toMenu('CONNECTION LOST', 'The link to your squad dropped.');
@@ -74,6 +92,22 @@ export function netOpen(mode, code, mapId) {
   };
 }
 
+/* one more go at the room we were in, on a lengthening delay */
+function netRetry() {
+  NET.resuming = true;
+  NET.tries++;
+  const n = NET.tries;
+  netStatus('connection lost — reconnecting (' + n + '/' + RETRY_MAX + ') ...', true);
+  say('LINK LOST — RECONNECTING (' + n + '/' + RETRY_MAX + ')', 3);
+  if (NET.retry) clearTimeout(NET.retry);
+  NET.retry = setTimeout(() => {
+    NET.retry = null;
+    if (role() !== 'client' || !NET.token) return;
+    netOpen('join', NET.room, NET.mapId);
+  }, retryDelay(n));
+}
+export function netReconnecting() { return NET.resuming && NET.tries > 0; }
+
 function netHandle(m) {
   switch (m.t) {
     case 'hosted':
@@ -85,19 +119,45 @@ function netHandle(m) {
       el('roombox').style.display = 'block';
       lobbyOpen();
       break;
-    case 'joined':
+    case 'joined': {
+      const back = !!m.resumed;
       NET.room = m.room; LOBBY.myId = m.id; NET.myId = m.id;
+      if (m.token) NET.token = m.token;
+      NET.tries = 0; NET.resuming = false;
+      if (back) {
+        /* the host will send the world again; until it does, hold the screen */
+        netStatus('reconnected — resyncing');
+        say('LINK RESTORED', 3);
+        break;
+      }
       netStatus('joined ' + m.room + ' — waiting for the host to start');
       netSend({ t: 'load', slots: LOADOUT.slots });
       lobbyOpen();
       break;
-    case 'peer':
+    }
+    case 'peer': {
       NET.peer = true;
+      if (m.resumed) {
+        /* somebody walked back in: their seat, their body, their loadout, all of
+           it still here. Hand them the world and let the snapshots do the rest. */
+        let pr = null;
+        for (const p of NET.peers) if (p.id === m.id) pr = p;
+        if (!pr) NET.peers.push({ id: m.id, name: m.name });
+        else pr.off = 0;
+        if (NETHOOK.rejoin) NETHOOK.rejoin(m.id, m.name);
+        break;
+      }
       NET.peers.push({ id: m.id, name: m.name });
       LOBBY.slots.push({ id: m.id, name: m.name || ('DIVER ' + m.id), role: 'diver',
                          load: LOADOUT.slots.slice() });
       netStatus((m.name || 'A player') + ' joined — set the roster, then start');
       lobbyBroadcast();
+      break;
+    }
+    case 'peergone':
+      /* their link dropped; the relay is holding the seat. Keep the body. */
+      for (const p of NET.peers) if (p.id === m.id) p.off = 1;
+      if (NETHOOK.linkdown) NETHOOK.linkdown(m.id, m.name);
       break;
     case 'lobby':
       LOBBY.mode = m.mode; LOBBY.slots = m.slots || [];
@@ -117,7 +177,12 @@ function netHandle(m) {
         const LS = lobbySlot(m.from);
         if (LS && Array.isArray(m.slots) && m.slots.length === 4) {
           LS.load = m.slots.map(String);
-          lobbyBroadcast();
+          /* Mid-mission this is somebody standing at a Requisition terminal, and
+             the four they picked have to reach the body the host is simulating --
+             otherwise their codes go on arming the four they dropped with. The
+             lobby broadcast is for the next round; this is for this one. */
+          if (S.running && NETLOAD.apply) NETLOAD.apply(m.from, LS.load);
+          else lobbyBroadcast();
         }
       }
       break;
@@ -145,10 +210,17 @@ function netHandle(m) {
   }
 }
 export const CFGHOOK = { apply: null };
+/* main.js hangs "give this diver these four" here; net.js cannot import the
+   roster code without dragging in half the game. */
+export const NETLOAD = { apply: null };
 /* main.js hangs the loop's catch-up here; see THE LOOP. */
 export const NETWAKE = { fn: null };
 
 export function netQuit() {
+  /* stop trying to get back in before tearing the socket down, or the close
+     handler starts another round of reconnects into a match we have left */
+  NET.token = ''; NET.tries = 0; NET.resuming = false;
+  if (NET.retry) { clearTimeout(NET.retry); NET.retry = null; }
   if (NET.ws) { try { NET.ws.close(); } catch (e) {} NET.ws = null; }
   setRole('solo');
   NET.peer = false; NET.room = ''; NET.hostPaused = false; NET.hosting = false;

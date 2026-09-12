@@ -15,7 +15,7 @@ import { S, diverById, isHost } from './state.js';
 import { drain } from './outbox.js';
 import { NET, netSend } from './net.js';
 import {
-  STRATS, STRAT_BY_ID, TROOP_IDS, ANG8, NETCULL, NETNEAR, NETMAX
+  STRATS, STRAT_BY_ID, TROOP_IDS, FACTION_IDS, ANG8, NETCULL, NETNEAR, NETMAX
 } from './data.js';
 import { netCK, netCA, mapSeed } from './world.js';
 import { reload, tryPickup, throwNade, meleeSwing, useStim, equipSlot } from './diver.js';
@@ -34,11 +34,16 @@ const R = Math.round;
    ones you cannot see are not worth the bandwidth. */
 const CULL = NETCULL, NEAR = NETNEAR, MAXSEND = NETMAX;
 
-export function netSendCity() {
-  netSend({
+export function netSendCity(to) {
+  const m = {
     t: 'city', map: S.map.id, seed: mapSeed, lv: S.hordeLv, cfg: CFG,
     rs: NET.roster, gm: S.gmMatch ? 1 : 0, lives: S.livesLeft
-  });
+  };
+  /* `to` addresses one listener: somebody who dropped and walked back in needs
+     the world again, and the rest of the squad must not have theirs rebuilt
+     under them while they are standing in it. */
+  if (to !== undefined) m.to = to;
+  netSend(m);
 }
 
 /* ---------------------------------------------------------------- input in */
@@ -122,11 +127,16 @@ function snapWorldShared() {
     nd.push(n.nid, R(n.x), R(n.y), R(n.z), R(n.fuse * 10), n.mortar ? 1 : 0);
   const dr = [];
   for (const d of S.drones) dr.push(d.nid, R(d.x), R(d.y), R(d.ang * 57.2958), d.owner);
+  /* the orbital laser: where the beacon is and, more to the point, where the
+     cutting head has walked to, so it burns the same ground on every screen */
+  const br = [];
+  for (const b of S.beamRuns)
+    br.push(b.nid, R(b.x), R(b.y), R(b.px), R(b.py), R(b.t * 10), R(b.dur), R(b.r));
   const ob = [];
   for (const o of S.objectives)
     ob.push(o.nid, OBJIDX.indexOf(o.id), R(o.x), R(o.y),
             R(o.prog * 10), R(o.hp), o.have, o.active || 0);
-  return { s: st, pk, pd, bl, nd, dr, ob };
+  return { s: st, pk, pd, bl, nd, dr, ob, br };
 }
 export const PICKIDX = ['supply', 'weapon', 'sample', 'shell', 'shield', 'dog', 'requisition'];
 export const WEPIDX = ['ar', 'pistol', 'mg43', 'recoilless', 'flamer', 'arc', 'bulletstorm'];
@@ -153,6 +163,7 @@ export function netSnapshot() {
     md: [R(S.mod.confuse), R(S.mod.radar), R(S.mod.spore), S.mod.barrage,
          S.mod.noSpawn ? R(S.mod.noSpawn.x) : 0, S.mod.noSpawn ? R(S.mod.noSpawn.y) : 0,
          S.mod.noSpawn ? R(S.mod.noSpawn.r) : 0, R(S.mod.uplink)],
+    wf: (S.waveFacs || []).map(f => FACTION_IDS.indexOf(f)),
     gm: { c: R(GM.credits), s: GM.score },
     wr: S.wreck ? [R(S.wreck.x), R(S.wreck.y), R(S.wreck.a * 100)] : 0
   };

@@ -63,35 +63,35 @@ export const TROOPS = {
 
   /* ---------------------------------------------------------- TERMINIDS --- */
   scavenger: {
-    id: 'scavenger', fac: 'terminid', size: 'small', name: 'SCAVENGER',
+    id: 'scavenger', art: 'scav', fac: 'terminid', size: 'small', name: 'SCAVENGER',
     hp: 26, spd: 138, dmg: 6, armor: 0, r: 11, cost: 1, atkCd: 0.7,
     melee: 1, legs: 6, sprint: 1
   },
   hunter: {
-    id: 'hunter', fac: 'terminid', size: 'small', name: 'HUNTER',
+    id: 'hunter', art: 'hunter', fac: 'terminid', size: 'small', name: 'HUNTER',
     hp: 42, spd: 152, dmg: 11, armor: 0, r: 12, cost: 2, atkCd: 0.8,
     melee: 1, legs: 4, leap: { range: 260, cd: 3.4, speed: 720, wind: 0.4 }
   },
   warrior: {
-    id: 'warrior', fac: 'terminid', size: 'medium', name: 'BILE WARRIOR',
+    id: 'warrior', art: 'warrior', fac: 'terminid', size: 'medium', name: 'BILE WARRIOR',
     hp: 190, spd: 80, dmg: 19, armor: 1, r: 20, cost: 6, atkCd: 1.0,
     melee: 1, legs: 6
   },
   spewer: {
-    id: 'spewer', fac: 'terminid', size: 'medium', name: 'BILE SPEWER',
+    id: 'spewer', art: 'spewer', fac: 'terminid', size: 'medium', name: 'BILE SPEWER',
     hp: 230, spd: 56, dmg: 13, armor: 0, r: 22, cost: 7, atkCd: 1.2,
     melee: 1, legs: 4,
     ranged: { range: 420, cd: 3.0, speed: 430, dmg: 16, spread: 0.13, burst: 5,
               proj: 'bile', snd: 'termSpit', pool: 1 }
   },
   charger: {
-    id: 'charger', fac: 'terminid', size: 'large', name: 'CHARGER',
+    id: 'charger', art: 'charger', fac: 'terminid', size: 'large', name: 'CHARGER',
     hp: 950, spd: 74, dmg: 46, armor: 3, r: 30, cost: 22, atkCd: 1.3,
     melee: 1, legs: 4, smash: 1,
     charge: { wind: 0.9, speed: 680, dur: 1.5, cd: 7, min: 210, max: 1000, snd: 'termCharge' }
   },
   biletitan: {
-    id: 'biletitan', fac: 'terminid', size: 'large', name: 'BILE TITAN',
+    id: 'biletitan', art: 'titan', fac: 'terminid', size: 'large', name: 'BILE TITAN',
     hp: 2800, spd: 46, dmg: 62, armor: 4, r: 52, cost: 55, atkCd: 2.0,
     melee: 1, legs: 8, smash: 1, boss: 1,
     slam: { wind: 1.0, radius: 130, dmg: 48 },
@@ -101,38 +101,38 @@ export const TROOPS = {
 
   /* --------------------------------------------------------- AUTOMATONS --- */
   trooper: {
-    id: 'trooper', fac: 'automaton', size: 'small', name: 'TROOPER',
+    id: 'trooper', art: 'trooper', fac: 'automaton', size: 'small', name: 'TROOPER',
     hp: 48, spd: 86, dmg: 7, armor: 1, r: 12, cost: 2, atkCd: 1.0,
     ranged: { range: 480, cd: 1.9, speed: 900, dmg: 8, spread: 0.10, burst: 3,
               proj: 'bolt', snd: 'autoShot' }
   },
   raider: {
-    id: 'raider', fac: 'automaton', size: 'small', name: 'RAIDER',
+    id: 'raider', art: 'raider', fac: 'automaton', size: 'small', name: 'RAIDER',
     hp: 40, spd: 118, dmg: 7, armor: 0, r: 12, cost: 2, atkCd: 0.9, sprint: 1,
     ranged: { range: 360, cd: 1.4, speed: 880, dmg: 6, spread: 0.16, burst: 4,
               proj: 'bolt', snd: 'autoShot' }
   },
   berserker: {
-    id: 'berserker', fac: 'automaton', size: 'medium', name: 'BERSERKER',
+    id: 'berserker', art: 'berserker', fac: 'automaton', size: 'medium', name: 'BERSERKER',
     hp: 280, spd: 108, dmg: 23, armor: 1, r: 19, cost: 7, atkCd: 0.5,
     melee: 1, saw: 1
   },
   devastator: {
-    id: 'devastator', fac: 'automaton', size: 'medium', name: 'DEVASTATOR',
+    id: 'devastator', art: 'devastator', fac: 'automaton', size: 'medium', name: 'DEVASTATOR',
     hp: 360, spd: 62, dmg: 12, armor: 2, r: 22, cost: 10, atkCd: 1.2,
     shield: 1,
     ranged: { range: 560, cd: 2.2, speed: 980, dmg: 10, spread: 0.09, burst: 8,
               proj: 'bolt', snd: 'autoShot' }
   },
   hulk: {
-    id: 'hulk', fac: 'automaton', size: 'large', name: 'HULK',
+    id: 'hulk', art: 'hulk', fac: 'automaton', size: 'large', name: 'HULK',
     hp: 1500, spd: 60, dmg: 36, armor: 3, r: 30, cost: 24, atkCd: 1.2,
     melee: 1, smash: 1, stomp: 1,
     ranged: { range: 260, cd: 3.2, speed: 320, dmg: 9, spread: 0.28, burst: 14,
               proj: 'flame', snd: 'flame' }
   },
   strider: {
-    id: 'strider', fac: 'automaton', size: 'large', name: 'FACTORY STRIDER',
+    id: 'strider', art: 'strider', fac: 'automaton', size: 'large', name: 'FACTORY STRIDER',
     hp: 3400, spd: 42, dmg: 20, armor: 4, r: 56, cost: 62, atkCd: 1.6,
     smash: 1, boss: 1, stomp: 1,
     spawner: { id: 'trooper', every: 7, n: 2 },
@@ -142,37 +142,37 @@ export const TROOPS = {
 
   /* --------------------------------------------------------- ILLUMINATE --- */
   voteless: {
-    id: 'voteless', fac: 'illuminate', size: 'small', name: 'VOTELESS',
+    id: 'voteless', art: 'voteless', fac: 'illuminate', size: 'small', name: 'VOTELESS',
     hp: 34, spd: 96, dmg: 9, armor: 0, r: 13, cost: 1, atkCd: 0.85,
     melee: 1, shamble: 1
   },
   watcher: {
-    id: 'watcher', fac: 'illuminate', size: 'small', name: 'WATCHER',
+    id: 'watcher', art: 'watcher', fac: 'illuminate', size: 'small', name: 'WATCHER',
     hp: 58, spd: 126, dmg: 0, armor: 0, r: 12, cost: 4, atkCd: 9,
     fly: 1, spotter: { every: 9, n: 3, id: 'voteless' }
   },
   overseer: {
-    id: 'overseer', fac: 'illuminate', size: 'medium', name: 'OVERSEER',
+    id: 'overseer', art: 'overseer', fac: 'illuminate', size: 'medium', name: 'OVERSEER',
     hp: 310, spd: 98, dmg: 13, armor: 1, r: 18, cost: 9, atkCd: 1.1,
     fly: 1,
     ranged: { range: 520, cd: 2.0, speed: 820, dmg: 12, spread: 0.08, burst: 4,
               proj: 'plasma', snd: 'illShot' }
   },
   fleshmob: {
-    id: 'fleshmob', fac: 'illuminate', size: 'medium', name: 'FLESHMOB',
+    id: 'fleshmob', art: 'fleshmob', fac: 'illuminate', size: 'medium', name: 'FLESHMOB',
     hp: 520, spd: 52, dmg: 40, armor: 1, r: 34, cost: 14, atkCd: 1.2,
     melee: 1, smash: 1, lumps: 1, bursts: 'voteless',
     slam: { wind: 0.75, radius: 100, dmg: 34 },
     charge: { wind: 0.9, speed: 620, dur: 0.85, cd: 9, min: 210, max: 900, snd: 'roar' }
   },
   harvester: {
-    id: 'harvester', fac: 'illuminate', size: 'large', name: 'HARVESTER',
+    id: 'harvester', art: 'harvester', fac: 'illuminate', size: 'large', name: 'HARVESTER',
     hp: 2300, spd: 54, dmg: 30, armor: 3, r: 40, cost: 32, atkCd: 1.5,
     legs: 3, smash: 1, stomp: 1,
     beam: { range: 560, cd: 5.0, wind: 1.1, dur: 2.2, dps: 46, snd: 'illBeam' }
   },
   leviathan: {
-    id: 'leviathan', fac: 'illuminate', size: 'large', name: 'LEVIATHAN',
+    id: 'leviathan', art: 'leviathan', fac: 'illuminate', size: 'large', name: 'LEVIATHAN',
     hp: 2600, spd: 86, dmg: 22, armor: 4, r: 48, cost: 58, atkCd: 1.4,
     fly: 1, boss: 1,
     ranged: { range: 700, cd: 2.1, speed: 900, dmg: 17, spread: 0.07, burst: 12,

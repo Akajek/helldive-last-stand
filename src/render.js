@@ -246,41 +246,118 @@ function drawEnemy(e) {
     ctx.beginPath(); ctx.arc(e.x, e.y - z, e.r + 3, e.face - 1.1, e.face + 1.1); ctx.stroke();
   }
 }
-/* ---- Terminid: chitin, too many legs, mandibles ---- */
+/* ---- Terminids ----
+   Six of them, and they used to be one drawing at six radii: an orange oval with
+   legs, scaled up. You could not tell a Hunter about to jump on you from a
+   Scavenger you could ignore until it was on top of you, which is a gameplay
+   problem dressed as an art one. Each has its own silhouette now, built from the
+   same chitin so they still read as one faction:
+
+     SCAVENGER   small, narrow, antennae, scuttling
+     HUNTER      folded jumping legs and forward sickles
+     BILE WARRIOR broad plated carapace, heavy mandibles
+     BILE SPEWER  an abdomen the size of the rest of it, and it is full
+     CHARGER      an armoured wedge with a body behind it
+     BILE TITAN   all of the above, eight legs, and a sac                        */
 function drawBug(e, T, body, dark) {
-  const r = e.r, legs = T.legs || 6, gait = Math.sin(e.t * (e.size === 'large' ? 5 : 11));
-  ctx.strokeStyle = dark; ctx.lineWidth = Math.max(2, r * 0.14);
+  const r = e.r, art = T.art;
+  const fast = art === 'scav' || art === 'hunter';
+  const gait = Math.sin(e.t * (e.size === 'large' ? 5 : fast ? 13 : 9));
+
+  if (art === 'hunter') { drawHunter(e, T, body, dark, gait); return; }
+  if (art === 'charger') { drawCharger(e, T, body, dark, gait); return; }
+
+  /* ---- legs ---- */
+  const legs = T.legs || 6;
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = Math.max(2, r * (art === 'warrior' ? 0.17 : art === 'titan' ? 0.15 : 0.12));
   ctx.lineCap = 'round';
   for (let i = 0; i < legs; i++) {
     const side = i % 2 ? 1 : -1;
     const k = (i >> 1) / Math.max(1, (legs >> 1) - 1 || 1);
     const bx = -r * 0.4 + k * r * 0.9;
     const sw = gait * side * (0.3 + k * 0.3);
+    const reach = art === 'spewer' ? 1.05 : 1.25;
     ctx.beginPath();
     ctx.moveTo(bx, side * r * 0.4);
-    ctx.lineTo(bx + sw * r * 0.5, side * (r * 1.25 + Math.abs(sw) * r * 0.2));
+    /* a knee, so the legs read as legs rather than as whiskers */
+    ctx.lineTo(bx + sw * r * 0.35, side * (r * 0.82 + Math.abs(sw) * r * 0.12));
+    ctx.lineTo(bx + sw * r * 0.5, side * (r * reach + Math.abs(sw) * r * 0.2));
     ctx.stroke();
   }
-  /* abdomen and thorax */
+
+  /* ---- abdomen ---- */
+  const sac = art === 'spewer' ? 1.9 : art === 'titan' ? 1.25 : art === 'warrior' ? 0.85 : 0.75;
   ctx.fillStyle = dark;
-  ctx.beginPath(); ctx.ellipse(-r * 0.55, 0, r * 0.6, r * 0.52, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = body;
-  ctx.beginPath(); ctx.ellipse(r * 0.05, 0, r * 0.78, r * 0.6, 0, 0, TAU); ctx.fill();
-  /* head + mandibles */
-  ctx.fillStyle = dark;
-  ctx.beginPath(); ctx.ellipse(r * 0.78, 0, r * 0.34, r * 0.3, 0, 0, TAU); ctx.fill();
-  const mo = Math.abs(Math.sin(e.t * 8)) * r * 0.14;
-  ctx.strokeStyle = dark; ctx.lineWidth = Math.max(1.6, r * 0.1);
   ctx.beginPath();
-  ctx.moveTo(r * 0.9, -r * 0.16 - mo); ctx.lineTo(r * 1.3, -r * 0.06 - mo);
-  ctx.moveTo(r * 0.9, r * 0.16 + mo); ctx.lineTo(r * 1.3, r * 0.06 + mo);
+  ctx.ellipse(-r * (art === 'spewer' ? 0.62 : 0.55), 0, r * 0.42 * sac, r * 0.4 * sac, 0, 0, TAU);
+  ctx.fill();
+  if (art === 'spewer') {
+    /* it is full, and it sloshes */
+    ctx.fillStyle = e.hit > 0 ? '#ffffff' : 'rgba(199,209,58,.5)';
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.66, Math.sin(e.t * 3) * r * 0.06, r * 0.56, r * 0.46, 0, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(199,209,58,.85)';
+    for (let i = 0; i < 3; i++) {
+      const a = 2.2 + i * 0.5;
+      ctx.beginPath();
+      ctx.arc(-r * 0.66 + Math.cos(a) * r * 0.4, Math.sin(a) * r * 0.34, r * 0.09, 0, TAU);
+      ctx.fill();
+    }
+  }
+
+  /* ---- thorax ---- */
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.ellipse(r * 0.05, 0, r * (art === 'scav' ? 0.66 : 0.78), r * (art === 'scav' ? 0.44 : 0.6),
+              0, 0, TAU);
+  ctx.fill();
+  if (art === 'warrior' || art === 'titan') {
+    /* plates: this is the armour the CLANG is coming from */
+    ctx.strokeStyle = 'rgba(0,0,0,.28)';
+    ctx.lineWidth = Math.max(1.5, r * 0.07);
+    for (let i = 0; i < 3; i++) {
+      const px = -r * 0.25 + i * r * 0.32;
+      ctx.beginPath();
+      ctx.arc(px, 0, r * 0.5, -1.15, 1.15);
+      ctx.stroke();
+    }
+  }
+
+  /* ---- head and mandibles ---- */
+  const hs = art === 'spewer' ? 0.26 : art === 'warrior' ? 0.4 : 0.34;
+  ctx.fillStyle = dark;
+  ctx.beginPath(); ctx.ellipse(r * 0.78, 0, r * hs, r * hs * 0.88, 0, 0, TAU); ctx.fill();
+  const mo = Math.abs(Math.sin(e.t * (fast ? 12 : 8))) * r * 0.14;
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = Math.max(1.6, r * (art === 'warrior' ? 0.15 : 0.1));
+  ctx.beginPath();
+  const ml = art === 'warrior' ? 1.5 : art === 'titan' ? 1.45 : 1.3;
+  ctx.moveTo(r * 0.9, -r * 0.16 - mo); ctx.lineTo(r * ml, -r * 0.06 - mo);
+  ctx.moveTo(r * 0.9, r * 0.16 + mo); ctx.lineTo(r * ml, r * 0.06 + mo);
   ctx.stroke();
+  if (art === 'scav') {
+    /* antennae, permanently twitching */
+    ctx.lineWidth = Math.max(1, r * 0.07);
+    ctx.beginPath();
+    ctx.moveTo(r * 0.85, -r * 0.2);
+    ctx.lineTo(r * 1.35, -r * 0.5 + Math.sin(e.t * 14) * r * 0.14);
+    ctx.moveTo(r * 0.85, r * 0.2);
+    ctx.lineTo(r * 1.35, r * 0.5 + Math.sin(e.t * 14 + 1) * r * 0.14);
+    ctx.stroke();
+  }
+  if (art === 'spewer') {
+    /* the nozzle, aimed at you */
+    ctx.fillStyle = 'rgba(199,209,58,.9)';
+    ctx.beginPath(); ctx.arc(r * 1.0, 0, r * 0.12, 0, TAU); ctx.fill();
+  }
   if (e.size !== 'small') {
     ctx.fillStyle = 'rgba(255,240,150,.85)';
     ctx.beginPath(); ctx.arc(r * 0.82, -r * 0.12, r * 0.08, 0, TAU); ctx.fill();
     ctx.beginPath(); ctx.arc(r * 0.82, r * 0.12, r * 0.08, 0, TAU); ctx.fill();
   }
-  if (T.boss) {                            /* a Titan's sac, and the spines on it */
+  if (art === 'titan') {                   /* the sac, and the spines over it */
     ctx.fillStyle = 'rgba(199,209,58,.55)';
     ctx.beginPath(); ctx.ellipse(-r * 0.62, 0, r * 0.44, r * 0.38, 0, 0, TAU); ctx.fill();
     ctx.strokeStyle = dark; ctx.lineWidth = 3;
@@ -290,6 +367,86 @@ function drawBug(e, T, body, dark) {
       ctx.lineTo(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.95); ctx.stroke();
     }
   }
+}
+/* the one that is about to be on top of you: coiled back legs, sickles forward */
+function drawHunter(e, T, body, dark, gait) {
+  const r = e.r, air = (e.z || 0) > 2;
+  ctx.strokeStyle = dark; ctx.lineWidth = Math.max(2, r * 0.15);
+  ctx.lineCap = 'round';
+  for (const side of [-1, 1]) {
+    /* hind legs: folded when coiled, straight out when it is in the air */
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.3, side * r * 0.35);
+    if (air) ctx.lineTo(-r * 1.2, side * r * 0.9);
+    else {
+      ctx.lineTo(-r * 0.55, side * r * 1.05);
+      ctx.lineTo(-r * 0.05 + gait * r * 0.2, side * r * 0.95);
+    }
+    ctx.stroke();
+    /* front legs, reaching */
+    ctx.lineWidth = Math.max(1.6, r * 0.11);
+    ctx.beginPath();
+    ctx.moveTo(r * 0.3, side * r * 0.3);
+    ctx.lineTo(r * 0.95 + gait * r * 0.15, side * r * 0.75);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(2, r * 0.15);
+  }
+  ctx.fillStyle = dark;
+  ctx.beginPath(); ctx.ellipse(-r * 0.5, 0, r * 0.42, r * 0.34, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.ellipse(r * 0.1, 0, r * 0.72, r * 0.45, 0, 0, TAU); ctx.fill();
+  /* wing cases, flared while it is airborne */
+  ctx.fillStyle = dark;
+  for (const side of [-1, 1]) {
+    ctx.save();
+    ctx.rotate(side * (air ? 0.6 : 0.18));
+    ctx.beginPath(); ctx.ellipse(-r * 0.1, side * r * 0.3, r * 0.5, r * 0.16, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = dark;
+  ctx.beginPath(); ctx.ellipse(r * 0.8, 0, r * 0.3, r * 0.24, 0, 0, TAU); ctx.fill();
+  /* the sickles */
+  ctx.strokeStyle = '#e8d9b0'; ctx.lineWidth = Math.max(1.8, r * 0.12);
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(r * 0.85, side * r * 0.35, r * 0.45, side > 0 ? -1.5 : 0.2, side > 0 ? -0.2 : 1.5);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#ffec9e';
+  ctx.beginPath(); ctx.arc(r * 0.9, -r * 0.1, r * 0.09, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(r * 0.9, r * 0.1, r * 0.09, 0, TAU); ctx.fill();
+}
+/* mostly a face full of armour with an animal somewhere behind it */
+function drawCharger(e, T, body, dark, gait) {
+  const r = e.r;
+  ctx.strokeStyle = dark; ctx.lineWidth = Math.max(3, r * 0.22);
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 4; i++) {
+    const side = i % 2 ? 1 : -1, k = i >> 1;
+    const bx = -r * 0.35 + k * r * 0.75;
+    const sw = Math.sin(e.t * (e.chg > 0 ? 14 : 6) + k * 2) * side * 0.4;
+    ctx.beginPath();
+    ctx.moveTo(bx, side * r * 0.45);
+    ctx.lineTo(bx + sw * r * 0.3, side * r * 0.85);
+    ctx.lineTo(bx + sw * r * 0.55, side * r * 1.15);
+    ctx.stroke();
+  }
+  ctx.fillStyle = dark;
+  ctx.beginPath(); ctx.ellipse(-r * 0.6, 0, r * 0.45, r * 0.5, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.ellipse(-r * 0.05, 0, r * 0.72, r * 0.62, 0, 0, TAU); ctx.fill();
+  /* the wedge: a slab of armour across the front, lit when it is committed */
+  ctx.fillStyle = e.hit > 0 ? '#ffffff' : (e.chg > 0 ? '#e8c07a' : '#b98a4c');
+  ctx.beginPath();
+  ctx.moveTo(r * 1.35, 0);
+  ctx.lineTo(r * 0.35, -r * 0.78);
+  ctx.lineTo(r * 0.1, 0);
+  ctx.lineTo(r * 0.35, r * 0.78);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = '#2a1c10';
+  ctx.beginPath(); ctx.arc(r * 0.55, -r * 0.3, r * 0.08, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(r * 0.55, r * 0.3, r * 0.08, 0, TAU); ctx.fill();
 }
 /* ---- Automaton: flat plates, one red eye, and a lot of right angles.
    Everything is longer than it is wide, so which way it is facing reads at a
@@ -369,8 +526,8 @@ function drawBot(e, T, body, dark) {
 }
 /* ---- Illuminate: smooth, lit from inside, and mostly off the ground ---- */
 function drawSquid(e, T, body, dark) {
-  const r = e.r;
-  if (T.lumps && e.lumps) {                /* the Fleshmob is its own thing */
+  const r = e.r, art = T.art;
+  if (art === 'fleshmob') {                /* the Fleshmob is its own thing */
     const sq = e.wind > 0 ? 1 + 0.18 * Math.sin(e.t * 30) : 1;
     ctx.fillStyle = e.hit > 0 ? '#ffffff' : '#4a3a34';
     for (let lm = 0; lm < 5; lm++) {
@@ -381,7 +538,7 @@ function drawSquid(e, T, body, dark) {
     }
     ctx.fillStyle = e.hit > 0 ? '#ffffff' : '#8d6f66';
     ctx.beginPath(); ctx.ellipse(0, 0, r * sq, r * 0.92 * sq, 0, 0, TAU); ctx.fill();
-    for (let lp = 0; lp < e.lumps.length; lp++) {
+    for (let lp = 0; lp < (e.lumps ? e.lumps.length : 0); lp++) {
       const L = e.lumps[lp];
       const lx = Math.cos(L.a + Math.sin(e.t * 1.6 + L.ph) * 0.25) * L.d;
       const ly = Math.sin(L.a + Math.sin(e.t * 1.6 + L.ph) * 0.25) * L.d;
@@ -395,7 +552,7 @@ function drawSquid(e, T, body, dark) {
     }
     return;
   }
-  if (T.id === 'voteless') {               /* a shambling body, not a squid */
+  if (art === 'voteless') {                /* a shambling body, not a squid */
     const lean = Math.sin(e.t * 9) * 0.25;
     ctx.fillStyle = body;
     ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.8, 0, 0, TAU); ctx.fill();
@@ -408,26 +565,107 @@ function drawSquid(e, T, body, dark) {
     ctx.beginPath(); ctx.arc(5, 0, 3.2, 0, TAU); ctx.fill();
     return;
   }
-  /* the floating ones: a shell, a glow, and tendrils */
   const pulse = 0.85 + 0.15 * Math.sin(e.t * 3 + e.bob);
   ctx.fillStyle = 'rgba(63,208,224,' + (0.13 * pulse) + ')';
   ctx.beginPath(); ctx.arc(0, 0, r * 1.7, 0, TAU); ctx.fill();
-  if (T.legs) {
-    ctx.strokeStyle = dark; ctx.lineWidth = Math.max(2, r * 0.13);
-    for (let i = 0; i < T.legs; i++) {
-      const a = (i / T.legs) * TAU + e.t * 0.3;
-      ctx.beginPath(); ctx.moveTo(Math.cos(a) * r * 0.4, Math.sin(a) * r * 0.4);
-      ctx.lineTo(Math.cos(a) * r * 1.45, Math.sin(a) * r * 1.45 + Math.sin(e.t * 3 + i) * 5);
+
+  if (art === 'watcher') {
+    /* an eye on a ring: no body to speak of, and it is looking at you */
+    ctx.strokeStyle = dark; ctx.lineWidth = Math.max(2, r * 0.16);
+    const spin = e.t * 1.6;
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 0.95, r * 0.95 * Math.abs(Math.cos(spin)), 0, 0, TAU);
+    ctx.stroke();
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.55, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#eaffff';
+    ctx.beginPath(); ctx.arc(r * 0.16, 0, r * 0.3, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#3fd0e0';
+    ctx.beginPath(); ctx.arc(r * 0.26, 0, r * 0.15, 0, TAU); ctx.fill();
+    /* the beam it is painting you with, when it is about to call something in */
+    if (e.spotT !== undefined && e.spotT < 1.2) {
+      ctx.strokeStyle = 'rgba(95,224,255,.35)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(r * 0.4, 0); ctx.lineTo(r * 3.2, 0); ctx.stroke();
+    }
+    return;
+  }
+  if (art === 'overseer') {
+    /* upright, cloaked, and carrying the thing it shoots you with */
+    ctx.fillStyle = dark;
+    for (let i = 0; i < 5; i++) {
+      const a = Math.PI + (i - 2) * 0.32;
+      ctx.save(); ctx.rotate(a);
+      ctx.beginPath();
+      ctx.ellipse(r * 0.95, 0, r * 0.55, r * 0.16 + Math.sin(e.t * 4 + i) * 2, 0, 0, TAU);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(-r * 0.05, 0, r * 0.62, r * 0.82, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = dark;
+    ctx.beginPath(); ctx.ellipse(r * 0.5, 0, r * 0.34, r * 0.3, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(95,224,255,' + (0.8 * pulse) + ')';
+    ctx.beginPath(); ctx.arc(r * 0.62, 0, r * 0.13, 0, TAU); ctx.fill();
+    /* the staff */
+    ctx.strokeStyle = '#cfd6e6'; ctx.lineWidth = Math.max(2, r * 0.12);
+    ctx.beginPath(); ctx.moveTo(r * 0.2, r * 0.55); ctx.lineTo(r * 1.25, r * 0.2); ctx.stroke();
+    ctx.fillStyle = '#5fe0ff';
+    ctx.beginPath(); ctx.arc(r * 1.3, r * 0.18, r * 0.13, 0, TAU); ctx.fill();
+    return;
+  }
+  if (art === 'harvester') {
+    /* a tripod: three jointed legs and a hull slung between them */
+    ctx.strokeStyle = dark; ctx.lineWidth = Math.max(3, r * 0.12);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU + e.t * 0.25;
+      const knee = Math.sin(e.t * 3 + i * 2) * r * 0.22;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * r * 0.35, Math.sin(a) * r * 0.35);
+      ctx.lineTo(Math.cos(a) * r * 0.95, Math.sin(a) * r * 0.95 - r * 0.35 - knee);
+      ctx.lineTo(Math.cos(a) * r * 1.5, Math.sin(a) * r * 1.5 + knee);
       ctx.stroke();
     }
-  } else {
-    ctx.strokeStyle = dark; ctx.lineWidth = 2.5;
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 0.85, r * 0.6, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = dark;
+    ctx.beginPath(); ctx.ellipse(r * 0.55, 0, r * 0.4, r * 0.34, 0, 0, TAU); ctx.fill();
+    /* the emitter, which brightens as it winds up */
+    const heat = e.beamT > 0 ? 1 : e.beamWind > 0 ? 0.6 : 0.2 * pulse;
+    ctx.fillStyle = 'rgba(95,224,255,' + heat + ')';
+    ctx.beginPath(); ctx.arc(r * 0.85, 0, r * 0.2 * (0.7 + heat * 0.6), 0, TAU); ctx.fill();
+    return;
+  }
+  if (art === 'leviathan') {
+    /* the big one: a long hull with wings, and a lot of underside */
+    ctx.fillStyle = dark;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.2, side * r * 0.2);
+      ctx.quadraticCurveTo(r * 0.1, side * (r * 1.35 + Math.sin(e.t * 1.6) * r * 0.12),
+                           -r * 0.95, side * r * 0.95);
+      ctx.quadraticCurveTo(-r * 0.6, side * r * 0.4, -r * 0.2, side * r * 0.2);
+      ctx.fill();
+    }
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 1.05, r * 0.46, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = dark;
+    ctx.beginPath(); ctx.ellipse(-r * 0.75, 0, r * 0.35, r * 0.3, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(95,224,255,' + (0.5 * pulse) + ')';
     for (let i = 0; i < 4; i++) {
-      const a = Math.PI + (i - 1.5) * 0.35;
-      ctx.beginPath(); ctx.moveTo(0, 0);
-      ctx.lineTo(Math.cos(a) * r * 1.3, Math.sin(a) * r * 1.3 + Math.sin(e.t * 5 + i) * 4);
-      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(-r * 0.4 + i * r * 0.35, 0, r * 0.11, 0, TAU); ctx.fill();
     }
+    ctx.fillStyle = '#eaffff';
+    ctx.beginPath(); ctx.arc(r * 0.92, 0, r * 0.14, 0, TAU); ctx.fill();
+    return;
+  }
+  /* anything else that floats: a shell, a glow and tendrils */
+  ctx.strokeStyle = dark; ctx.lineWidth = 2.5;
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI + (i - 1.5) * 0.35;
+    ctx.beginPath(); ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(a) * r * 1.3, Math.sin(a) * r * 1.3 + Math.sin(e.t * 5 + i) * 4);
+    ctx.stroke();
   }
   ctx.fillStyle = body;
   ctx.beginPath(); ctx.ellipse(0, 0, r * 0.92, r * 0.7, 0, 0, TAU); ctx.fill();
@@ -436,7 +674,6 @@ function drawSquid(e, T, body, dark) {
   ctx.fillStyle = '#eaffff';
   ctx.beginPath(); ctx.arc(r * 0.5, 0, r * 0.14, 0, TAU); ctx.fill();
 }
-
 /* ============================ DIVERS ============================ */
 function drawCape(P) {
   const c = P.cape;

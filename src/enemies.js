@@ -61,6 +61,13 @@ export function spawnEnemy(troopId, opts) {
     wind: 0, leapCd: rand(1, 4), leaping: 0,
     beamCd: rand(2, 5), beamT: 0, beamWind: 0,
     spawnT: rand(3, 7), spotT: rand(3, 8),
+    /* Whether this particular body is the sort to pick a fight with the other
+       faction. Without it every single one of them does -- two factions in the
+       same wave means every body always has a foe within arm's reach, and the
+       whole map brawls while the Helldivers walk through the middle of it
+       unnoticed. Measured: 50 bodies, 50 targeting each other, nought
+       targeting either Helldiver. */
+    brawl: Math.random() < 0.55 ? 1 : 0,
     z: T.fly ? 34 : 0, bob: rand(0, TAU), footT: rand(0, 1), idleT: rand(0.5, 6),
     moved: 0
   };
@@ -120,19 +127,25 @@ function nearestFoe(e, range) {
 
 /* ============================ TARGETING ============================ */
 const INFIGHT_RANGE = 460;
+/* Inside this, a Helldiver is the problem, whatever else is going on. */
+const DIVER_LOCK = 420;
 function chooseTarget(e) {
   const T = e.T;
-  /* something just shot it, and it has not forgotten */
-  if (e.madT > 0) {
-    const foe = nearestFoe(e, 900);
-    if (foe && foe.fac === e.mad) return { x: foe.x, y: foe.y, ref: foe, kind: 'enemy' };
-  }
-  /* the broadcast is down: nobody remembers what they were here for */
+  const nd = nearestDiver(e.x, e.y);
+  const diverNear = nd && nd.d < DIVER_LOCK;
+  /* the broadcast is down: nobody remembers what they were here for. This one
+     outranks everything, because making them forget you is the entire point of
+     the objective the squad broke to get it. */
   if (S.mod.confuse > 0) {
     const foe = nearestFoe(e, 1800);
     if (foe) return { x: foe.x, y: foe.y, ref: foe, kind: 'enemy' };
   }
-  const nd = nearestDiver(e.x, e.y);
+  /* something from the other faction just shot it, and it has not forgotten --
+     unless a Helldiver is close enough to be the more pressing matter */
+  if (e.madT > 0 && !diverNear) {
+    const foe = nearestFoe(e, 900);
+    if (foe && foe.fac === e.mad) return { x: foe.x, y: foe.y, ref: foe, kind: 'enemy' };
+  }
   let best = nd ? nd.d : Infinity;
   let out = nd ? { x: nd.p.x, y: nd.p.y, ref: nd.p, kind: 'diver' } : null;
 
@@ -141,8 +154,10 @@ function chooseTarget(e) {
     const d = dist(e, s);
     if (d < best * 0.7) { best = d; out = { x: s.x, y: s.y, ref: s, kind: 'sentry' }; }
   }
-  /* and so is the thing from the other faction standing right there */
-  if (CFG.infight > 0) {
+  /* ...and so is the thing from the other faction standing right there -- but
+     only for the half of them inclined to go and deal with it, and never while
+     a Helldiver is close enough to be the more immediate problem. */
+  if (CFG.infight > 0 && e.brawl && best > DIVER_LOCK) {
     const range = INFIGHT_RANGE * (0.5 + CFG.infight);
     const foe = nearestFoe(e, Math.min(range, best));
     if (foe) {
@@ -305,9 +320,21 @@ export function updateEnemies(dt) {
     e.y = clamp(e.y, -S.world, S.world);
     if (!T.fly) resolveCircle(e, e.r);
     e.moved = Math.hypot(e.x - wasX, e.y - wasY);
-    if (e.moved > 1 && e.chg <= 0 && e.leaping <= 0) e.face = Math.atan2(e.vy, e.vx);
-    else if (e.chg > 0 || e.leaping > 0) e.face = e.cdir;
-    else if (e.shots > 0) e.face = e.aimShot;
+    /* Which way it is pointing. It turns towards where it is going rather than
+       snapping there: in a crowd the velocity direction changes every frame as
+       bodies shove each other, and snapping to it makes a swarm look like a bag
+       of spinning sprites. Anything committed -- a charge, a leap, a burst --
+       overrides, because that is the direction it is actually about to hurt you
+       from. A body that has been stopped by the crowd keeps turning towards its
+       target instead of freezing on whatever it was facing when it got stuck. */
+    let want = e.face;
+    if (e.chg > 0 || e.leaping > 0) want = e.cdir;
+    else if (e.shots > 0) want = e.aimShot;
+    else if (e.moved > 0.5) want = Math.atan2(e.vy, e.vx);
+    else if (t.kind !== 'none') want = Math.atan2(t.y - e.y, t.x - e.x);
+    const turn = (e.chg > 0 || e.leaping > 0) ? 1
+               : 1 - Math.exp(-(e.size === 'large' ? 7 : e.size === 'medium' ? 11 : 16) * dt);
+    e.face = angLerp(e.face, want, turn);
 
     /* ---- shooting ---- */
     if (T.ranged && e.stun <= 0 && e.chg <= 0) fireRanged(e, t);

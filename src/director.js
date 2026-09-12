@@ -55,7 +55,7 @@ export const DIR = {
 export function resetDirector() {
   DIR.queue.length = 0;
   DIR.waveT = 0; DIR.wave = 0; DIR.lastFacs = []; DIR.banner = '';
-  S.wave = 0;
+  S.wave = 0; S.waveFacs = [];
 }
 
 export function updateDirector(dt) {
@@ -90,12 +90,18 @@ function planWave() {
   let budget = (26 + wave * 16 * (0.4 + CFG.wave)) * squadMul();
   budget *= rand(0.85, 1.2);
 
-  /* one faction, or two on a collision course */
+  /* Who is coming. A wave with one faction in it is the exception now, not the
+     rule: from the second minute onwards two of them arrive from opposite sides
+     on a collision course, and once in a while all three do. A single faction is
+     still worth keeping for the odd minute of undivided attention -- and it is
+     all you get if the lobby only enabled one, or if infighting is turned off. */
   let use = [];
-  if (facs.length > 1 && CFG.infight > 0 && wave >= 2 && Math.random() < 0.42) {
-    const sh = shuffle(facs.slice());
-    use = [sh[0], sh[1]];
-  } else use = [pick(facs)];
+  const sh = shuffle(facs.slice());
+  if (facs.length > 1 && CFG.infight > 0 && wave >= 2) {
+    const r = Math.random();
+    const n = (facs.length > 2 && wave >= 4 && r < 0.3) ? 3 : (r < 0.85 ? 2 : 1);
+    use = sh.slice(0, Math.min(n, facs.length));
+  } else use = [sh[0]];
   DIR.lastFacs = use;
 
   const perFac = budget / use.length;
@@ -103,12 +109,14 @@ function planWave() {
 
   for (let f = 0; f < use.length; f++) {
     const fac = use[f];
-    /* two factions arrive from opposite sides so that they actually meet */
-    const side = use.length > 1 ? baseAngle + f * Math.PI : undefined;
+    /* they arrive spread evenly around the squad so that they converge on it --
+       and, on the way in, on each other */
+    const side = use.length > 1 ? baseAngle + f * (TAU / use.length) : undefined;
     spend(fac, perFac, shape, sw, side, wave);
   }
 
   const names = use.map(f => FACTIONS[f].name).join(' vs ');
+  S.waveFacs = use.slice();
   if (use.length > 1) {
     DIR.banner = names + ' — THEY ARE BOTH COMING';
     say('WAVE ' + wave + ' · ' + names, 4);

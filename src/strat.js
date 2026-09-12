@@ -127,7 +127,8 @@ export function callIn(b) {
       break;
     }
     case 'orblaser':
-      S.beamRuns.push({ x, y, t: 0, dur: 8, ang: rand(0, TAU), who, r: 240 });
+      S.beamRuns.push({ nid: nid(), x, y, px: x, py: y, t: 0, dur: 8,
+                        ang: rand(0, TAU), who, r: 240 });
       worldEv('siren', x, y);
       break;
     case 'orbbarrage':
@@ -434,11 +435,37 @@ export function updateBeamRuns(dt) {
   for (let i = S.beamRuns.length - 1; i >= 0; i--) {
     const B = S.beamRuns[i];
     B.t += dt;
-    /* it walks a slow spiral rather than sitting still, so it sweeps an area */
-    B.ang += dt * 1.5;
-    const rr = B.r * (0.25 + 0.75 * Math.abs(Math.sin(B.t * 0.6)));
-    const px = B.x + Math.cos(B.ang) * rr, py = B.y + Math.sin(B.ang) * rr;
-    B.px = px; B.py = py;
+    /* Where the cutting head wants to be. It used to walk a fixed spiral, which
+       meant it drew circles in an empty street while the horde stood ten metres
+       away and watched -- so it looks for the biggest thing near the beacon and
+       walks over to it, sweeping as it goes. The host decides; a joining
+       Helldiver is told where the head is, because working it out locally from a
+       horde that has been culled around them would put the beam somewhere else
+       on their screen. */
+    let px = B.px === undefined ? B.x : B.px, py = B.py === undefined ? B.y : B.py;
+    if (sim()) {
+      B.hunt -= dt;
+      if (!B.tgt || B.tgt.hp <= 0 || B.hunt <= 0 ||
+          Math.hypot(B.tgt.x - B.x, B.tgt.y - B.y) > B.r * 2.4) {
+        B.hunt = 0.6;
+        B.tgt = pickBeamTarget(B);
+      }
+      B.ang += dt * 1.5;
+      let wx, wy;
+      if (B.tgt) { wx = B.tgt.x; wy = B.tgt.y; }
+      else {
+        /* nothing left standing: fall back to sweeping the beacon */
+        const rr = B.r * (0.25 + 0.75 * Math.abs(Math.sin(B.t * 0.6)));
+        wx = B.x + Math.cos(B.ang) * rr; wy = B.y + Math.sin(B.ang) * rr;
+      }
+      /* it tracks at a finite speed -- a target further than the beam can walk
+         to simply gets away with it */
+      const dx = wx - px, dy = wy - py, dd = Math.hypot(dx, dy);
+      const step = 520 * dt;
+      if (dd > step) { px += dx / dd * step; py += dy / dd * step; }
+      else { px = wx; py = wy; }
+      B.px = px; B.py = py;
+    }
     S.beams.push({ x1: px, y1: py - 1500, x2: px, y2: py, col: '#ff4d6b',
                    life: 0.06, max: 0.06, jag: 0, w: 20, live: 1 });
     blast(px, py, 70, '#ff4d6b', 0.18);
@@ -456,8 +483,23 @@ export function updateBeamRuns(dt) {
     }
     if (Math.random() < dt * 30) sndAt(falloff(px, py, 2400), SFX.laserHum);
     addShake(falloff(px, py, 1800) * 5);
-    if (B.t >= B.dur) S.beamRuns.splice(i, 1);
+    if (sim() && B.t >= B.dur) S.beamRuns.splice(i, 1);
   }
+}
+/* the largest thing in range of the beacon, because that is what the Helldiver
+   who threw it was hoping for */
+function pickBeamTarget(B) {
+  let best = null, bs = -1;
+  for (const e of S.enemies) {
+    const d = Math.hypot(e.x - B.x, e.y - B.y);
+    if (d > B.r * 2.2) continue;
+    /* size first, then nearness to the head, so it does not ping-pong across
+       the crater between two equals */
+    const score = SIZE[e.size].i * 4000 + e.max * 0.5
+                - Math.hypot(e.x - B.px, e.y - B.py) * 1.5;
+    if (score > bs) { bs = score; best = e; }
+  }
+  return best;
 }
 
 /* ============================ THE SUPER DESTROYER ============================
