@@ -514,7 +514,7 @@ function syncNames() {
 }
 
 /* ============================ THE LOOP ============================ */
-let last = 0, fpsAcc = 0, fpsN = 0, errShown = false;
+let last = 0, lastRaf = 0, fpsAcc = 0, fpsN = 0, errShown = false;
 
 /* One step of everything. `paint` is false when the tab is not being looked at:
    the world still has to move -- the host owes the rest of the squad a
@@ -548,6 +548,7 @@ function step(dt, paint) {
 }
 
 function frame(t) {
+  lastRaf = performance.now();
   const dt = Math.min(0.05, (t - last) / 1000 || 0);
   last = t;
   step(dt, true);
@@ -566,31 +567,36 @@ function frame(t) {
 }
 requestAnimationFrame(frame);
 
-/* ---- a clock that does not stop when you look away --------------------
+/* ---- a clock that does not stop when the window does ------------------
    Browsers stop calling requestAnimationFrame in a hidden tab and throttle
    setInterval down to once a second. For a solo game that is a courtesy. For a
-   host it means alt-tabbing freezes the mission for everybody else, and for a
-   client it means no input goes upstream until you come back.
-   A worker's timers are not throttled, so the simulation keeps its own clock
-   while the tab is hidden and only the drawing stops. */
+   host it means alt-tabbing freezes the mission for the whole squad, and for a
+   client it means no input goes upstream until they come back.
+
+   The trigger is deliberately "has rAF actually run recently", not
+   `document.hidden`. A window that is merely covered by another one, or
+   minimised, keeps reporting itself as visible while the compositor quietly
+   stops painting it -- so gating on the flag misses exactly the case a host is
+   most likely to hit. A worker's timers are not throttled, so it watches the
+   clock and steps the simulation itself whenever rAF has gone quiet. Only the
+   drawing stops. */
+const RAF_STALL = 0.25;                    /* seconds of silence before we step in */
 let ticker = null;
 try {
-  const src = 'let t=null;onmessage=function(e){if(e.data){if(!t)t=setInterval(function(){postMessage(0)},16)}else{clearInterval(t);t=null}}';
+  const src = 'setInterval(function(){postMessage(0)},16)';
   ticker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
   ticker.onmessage = () => {
-    if (!document.hidden) return;          /* rAF has it while we are visible */
     const t = performance.now();
+    if (t - lastRaf < RAF_STALL * 1000) return;     /* rAF is doing its job */
     const dt = Math.min(0.05, (t - last) / 1000 || 0);
     last = t;
     if (dt > 0.001) step(dt, false);
   };
-} catch (e) { /* no workers: a hidden tab simply pauses, as it always did */ }
+} catch (e) { /* no workers: an unpainted window pauses, as it always did */ }
 document.addEventListener('visibilitychange', () => {
   /* do not charge the simulation for the time nobody was watching */
   last = performance.now();
-  if (ticker) ticker.postMessage(document.hidden ? 1 : 0);
 });
-if (ticker && document.hidden) ticker.postMessage(1);
 
 /* ============================ BUTTON WIRING ============================ */
 document.querySelectorAll('#maps [data-map]').forEach(b => {

@@ -1,7 +1,10 @@
 # HELLDIVE: LAST STAND
 
-A top-down survival shooter. Solo, or two players over the internet with one of you
-running the horde.
+A top-down survival shooter. Solo, or up to four people over the internet with one of
+you optionally running the horde by hand.
+
+Three factions are on the rock and only one of them came for you. They fight each
+other given the chance — give it to them.
 
 ## Running it
 
@@ -9,17 +12,19 @@ running the horde.
 node server.js
 ```
 
-Then open <http://localhost:8080>. That's it — no `npm install`, no dependencies. The
-same process serves the page *and* relays the multiplayer traffic.
+Then open <http://localhost:8080>. No `npm install`, no dependencies, no build step.
+The same process serves the page *and* relays the multiplayer traffic.
 
 Use a different port with `node server.js 3000`.
 
-`index.html` still works on its own if you just double-click it — you only need the
-server for multiplayer.
+> **This build has to be served over HTTP.** It is split into ES modules, and browsers
+> will not load modules off `file://`. Opening `index.html` by double-clicking it shows
+> a page telling you so. If you want the double-click-and-play version, the previous
+> single-file build is kept at **`legacy/index.html`** and still works that way.
 
-## Playing with a friend who isn't on your LAN
+## Playing with friends who aren't on your LAN
 
-Your friend needs to reach your server. Two ways:
+They need to reach your server. Two ways:
 
 **A tunnel (quickest).** Leave `node server.js` running and, in a second terminal:
 
@@ -27,14 +32,10 @@ Your friend needs to reach your server. Two ways:
 npx cloudflared tunnel --url http://localhost:8080
 ```
 
-It prints a public `https://<words>.trycloudflare.com` URL. Your friend opens that and
-plays — no warning page, no account, and secure WebSockets work through it. Nothing
-else to configure: the page works out which relay to use from the address it was
-loaded from, so `https://` page means `wss://` relay automatically.
-
-> `npx localtunnel --port 8080` also works, but it puts an interstitial in front of the
-> page that asks visitors to type your public IP address (which it displays), and that
-> gate can be sticky. Cloudflare's is cleaner for this.
+It prints a public `https://<words>.trycloudflare.com` URL. They open that and play —
+no warning page, no account, and secure WebSockets work through it. The page works out
+which relay to use from the address it was loaded from, so an `https://` page means a
+`wss://` relay automatically.
 
 **If `npx` fails on Windows** with `ENOENT ... AppData\Roaming\npm`, npm's global
 folder was never created. Make it once and `npx` works from then on:
@@ -43,164 +44,219 @@ folder was never created. Make it once and `npx` works from then on:
 mkdir "%APPDATA%\npm"
 ```
 
-**Deploy it (better if you play often).** Push this folder to any free Node host
-(Fly.io, Render, Railway). They set `PORT` automatically, which the server reads.
-Both of you then just open the deployed URL.
+**Deploy it (better if you play often).** Push this folder to any free Node host. There
+is a `render.yaml` for Render; Fly.io and Railway work the same way. They set `PORT`
+automatically, which the server reads. Everyone then just opens the deployed URL.
 
 The **relay** box on the menu is only needed if the page and the relay live in
 different places; leave it blank otherwise.
 
+## Controls
+
+| | |
+|---|---|
+| `WASD` | move · `SHIFT` sprint |
+| mouse | aim · click to fire |
+| `1` `2` `3` | primary · sidearm · support weapon |
+| `R` | reload — **a reload throws away the rounds left in the magazine** |
+| `G` `Q` `F` | frag · stim · melee |
+| `E` | pick up, or use a terminal |
+| `L` | loadout (in a mission this needs a Requisition terminal) |
+| hold `CTRL` + arrows | stratagem code, then **click** to throw the beacon |
+| `N` `-` `=` `M` | music · music volume · mute everything |
+| `ESC` | pause and settings |
+
+## The three factions
+
+Each has two small, two medium and two large troops. Size decides how far it can be
+heard, how hard it is to shove, and what it costs a wave's budget.
+
+| | Small | Medium | Large |
+|---|---|---|---|
+| **Terminids** | Scavenger, Hunter | Bile Warrior, Bile Spewer | Charger, **Bile Titan** |
+| **Automatons** | Trooper, Raider | Berserker, Devastator | Hulk, **Factory Strider** |
+| **Illuminate** | Voteless, Watcher | Overseer, Fleshmob | Harvester, **Leviathan** |
+
+Terminids swarm and bite. Automatons shoot back, and a Devastator's shield only covers
+the side it is facing. The Illuminate float — Overseers and Leviathans ignore walls
+entirely — and a Watcher left alone will keep calling more Voteless in.
+
+### Armour and penetration
+
+Every body has armour 0–4 and every round has penetration 0–4.
+
+- penetration ≥ armour → full damage
+- one short → 45%
+- two or more short → 7%, a spark and a **CLANG**
+
+That noise is the game telling you to bring something heavier, not a bug. A Liberator
+will not open a Charger. A Recoilless Rifle will open anything in the game.
+
+### They fight each other
+
+When two factions meet, they engage. Shoot a Terminid with an Automaton bolt and the
+Terminid goes after the Automaton. Two factions often draw in the same wave and arrive
+from opposite sides specifically so that they run into each other on the way to you.
+
+The **INFIGHTING** slider controls how readily this happens; at 0 they have a truce.
+
+## The maps
+
+- **THE PLAINS** — open ground, 6000 units square. Nothing to hide behind, and nothing
+  to hide them either.
+- **MEGACITY** — the same size, fully destructible down to 30-unit cells. Buildings that
+  lose enough of themselves collapse, and anything inside goes with them. Super Earth
+  rebuilds the block every 75 seconds.
+- **THE HIVE** — underground, tighter, and dark. You only see what your torch sees.
+
+### The Hive is different
+
+There is no sky, so **nothing can be called down** — not a pod, not an orbital shell,
+not an Eagle, which would have to fly through several hundred metres of rock. You start
+with what you carry.
+
+Breaking a **JAMMER** punches a hole in the interference and opens a 120-second uplink
+window. Everything you have been saving, all at once, and then the rock comes back. The
+HUD tells you which state you are in.
+
+Reinforcements still work: they walk in from the nearest cave mouth instead of dropping.
+
+## Waves
+
+Every minute is a wave with a budget, and the budget grows. What it buys is deliberately
+lumpy — one wave is four hundred Scavengers, the next is three Chargers and nothing
+else — because a horde that arrives in the same proportions every time stops being
+frightening by the fourth minute.
+
+Wave shapes include a swarm, a mixed push, an elite wave, a ranged patrol, and from wave
+five, a **titan-class signature**, which means exactly what you think.
+
+## Objectives
+
+One or two are live at a time. They appear on the tactical map and in the ticker under
+the timer, and they time out if you ignore them.
+
+| | What it is | What it pays |
+|---|---|---|
+| **UPLOAD MISSION DATA** | stand in the ring until it finishes | **+1 reinforcement** |
+| **RECOVER SAMPLES** | six containers scattered nearby | every stratagem off cooldown |
+| **DESTROY THE JAMMER** | a structure, armour 2 | the uplink back (and underground, a window) |
+| **BURN THE SPORE TOWER** | a structure choking your vision | clear air |
+| **BRING UP THE RADAR** | hold the array for 20s | full map **and no hostile deployment near it for 100s** |
+| **SILENCE THE BROADCAST** | a structure, armour 1 | **50 seconds of them fighting each other** |
+| **LOAD SEAF ARTILLERY** | carry three shells to the gun | a free barrage |
+
+Three of those are aimed squarely at a Game Master — and **every** completed objective
+takes credits out of their pocket.
+
+## Stratagems
+
+You carry **four**, chosen on the loadout screen before you drop. Three more never take
+a slot: **REINFORCE**, **RESUPPLY** and **REQUISITION** — the last of which drops a
+terminal you can stand on to swap your four mid-mission.
+
+Eagles, orbitals, four sentry types, five support weapons, a shield generator and a
+guard dog. Then there are two that are not on any list. One of them is very large.
+
+## Game Master mode
+
+The host runs the horde by hand. They get a bank account instead of a rifle, all three
+faction palettes (`Q`/`E` or the tabs to switch), and a bonus every time a Helldiver
+goes down — which is the only score they have.
+
+They cannot deploy inside the bubble around a Helldiver, inside a wall, or inside a
+radar exclusion the squad earned.
+
+`R` rallies everything of the current faction nearby onto the nearest Helldiver.
+
+**In GM mode the lobby creator is the Game Master and cannot hand it over.** The
+simulation lives on their machine and snapshots are culled around each recipient, so an
+off-host GM would be looking at a map with holes in it. Switch the lobby to **CO-OP** if
+the host wants to play.
+
 ## The lobby
 
-Whoever hosts gets a 4-character room code; up to three more people join with it.
-Everyone lands in a shared lobby with a slot list, and the host picks the mode:
+Whoever hosts gets a 4-character room code; up to three more join with it. The host owns
+the mode, the mission settings and every slot's role. Everyone's chosen loadout shows in
+the slot list so you can see what the squad is bringing.
 
-- **GM vs PLAYERS** — one Game Master feeds the horde by hand against the squad.
-- **CO-OP** — everybody drops as Helldivers and the AI spawner runs the horde.
+## Mission settings
 
-**Making the lobby is how you become the Game Master.** In GM mode the host holds the
-badge and cannot put it down, and nobody else can ask for it — switch the lobby to
-CO-OP if you would rather play. This is not politeness: the simulation lives on the
-host's machine and snapshots are culled around the squad, so an off-host GM would be
-looking at a map with holes in it.
+Presets: **SWARM**, **ELITE**, **BOTH**, **FLAT**, and **TOTAL WAR**. Underneath: which
+factions are in play, whether objectives appear, how fast the horde level and the wave
+budget climb, how hard enemies toughen, the Game Master's income, how many
+reinforcements the squad gets, and squad scaling.
 
-Everyone else claims their own slot (**PLAY** or **WATCH**). Mission settings belong
-to the host alone; the rest see them greyed out and synced. The mission will not start
-without a sane roster — GM mode needs at least one Helldiver, and so does co-op.
+**Friendly fire** is two separate dials — one for what your squadmates do to you, one
+for what your own turrets do. Both off by default. Neither touches what your *own*
+ordnance does to you; standing under your own 500KG is the deal you made.
 
-Set your **name** in the menu or in the lobby bar. It is remembered between sessions,
-shows in the slot list, and is painted over your Helldiver's head in the mission so
-the squad can tell each other apart. Changing it mid-mission applies next round — the
-roster is fixed at the drop.
+## Performance and the network
 
-## The two roles
+Things that were specifically fixed, since they were the reported problems:
 
-### Helldiver
+- **The Liberty crash.** `podLand()` referenced an undefined variable on that payload.
+  Under strict mode it threw before the pod was removed from the list, so the next frame
+  threw again — forever. The game froze permanently. It was reproducible on any
+  platform; it just got found on Linux first. There is a regression test for it.
+- **Snapshots are built per client** and culled around *that* client's Helldiver, with a
+  hard ceiling of 210 bodies per message, nearest first. The old build culled around the
+  whole squad, so everybody paid for everybody. Worst case measured 157 KB/s → 90 KB/s;
+  a realistic busy fight is about 34.
+- **Rounds are sent once when fired** instead of having their position retransmitted
+  twelve times a second for their whole short life.
+- **A hidden tab no longer freezes the mission.** Browsers stop calling
+  `requestAnimationFrame` in a background tab, so a host who alt-tabbed froze the game
+  for the whole squad. The simulation now runs off a Worker clock when the tab is not
+  visible; only the drawing stops.
+- **Detail scales automatically** to hold the frame rate, and can be pinned to HIGH or
+  LOW in the pause menu.
 
-| | |
-|---|---|
-| `WASD` | move (`SHIFT` sprint) |
-| mouse / click | aim / fire |
-| `R` | reload — a partial mag is thrown away, count your shots |
-| `1` `2` `3` | primary / sidearm / support weapon |
-| `G` `Q` `F` | grenade / stim / melee |
-| `E` | pick up a crate or a dropped weapon |
-| `CTRL` + arrows | stratagem code, then click to throw the beacon |
-| `N` `-` `=` `M` | music on-off / volume / mute all |
-| `ESC` | pause — volumes, and where your health reads |
+## The old build
 
-Your own health can sit in the **corner** panel, on a **bar over your Helldiver**, or
-both; pick it in the pause menu and it is remembered. Squadmates always get the bar
-over their head regardless — you cannot cover someone whose health you have to guess at.
+`legacy/index.html` is the previous single-file version, unchanged and still playable —
+including by double-clicking it. It is also tagged `v1-single-file` in git.
 
-### Game Master
+## Layout
 
-The Game Master does not carry a rifle, so none of the Helldiver's furniture is drawn
-for them. They get their own panel instead: credits and income rate, the unit palette,
-and a **live squad readout** — every Helldiver's name, health bar and status (`INBOUND`,
-`DOWN`, `LOST`), plus deployments made, credits spent, kills taken off you, and how many
-reinforcements the squad has left.
+```
+index.html     shell: markup, CSS, and a <script type="module">
+src/           eighteen modules, loaded directly by the browser
+server.js      static host + dependency-free WebSocket relay
+legacy/        the previous single-file build
+test/          headless test suites (see below)
+```
 
-| | |
-|---|---|
-| `WASD` | pan the camera (`SHIFT` faster) |
-| `SPACE` | snap the camera to the nearest Helldiver |
-| `1` `2` | pick Voteless (1 credit) or Fleshmob (16) |
-| click / hold | deploy at the cursor |
+`src/` is split by concern: `data.js` holds every table the game is built out of
+(factions, troops, weapons, stratagems, maps, objectives), `sim.js` is one frame of the
+world, `host.js` and `client.js` are the two halves of the wire, and nothing has an
+ambient "current player" — every function that acts on a Helldiver takes that Helldiver
+as an argument.
 
-Credits accrue over time and faster as the horde level climbs. You cannot deploy
-within 380 units of any Helldiver, or inside a building — no spawn-camping. The
-automatic horde spawner is switched off in a GM match: every enemy on the map is one
-you placed by hand.
+## Tests
 
-## Dying, and getting back up
+```bash
+npm test
+```
 
-Reinforcements are a **squad budget**, not a personal one: every death anywhere in the
-squad spends one. When they run out, the next Helldiver to fall stays down for good,
-and the round ends once the last one is gone.
+Runs three suites, none of which need a browser:
 
-Reinforcements are spent **when someone is called back up, not when they fall**. Dying
-only puts you on the ground; the budget only moves when a pod actually comes down for
-you. A call that cannot be answered — nobody down, or nothing left in the budget — is
-refused and costs neither the beacon nor the cooldown.
+- **`test/run.mjs`** — the real simulation, headless. Twenty minutes on every map, every
+  stratagem, every weapon, every sentry, armour, infighting, all seven objectives, the
+  cave uplink, the squad wipe and reinforcement rules, a five-hundred-body stress test,
+  and leak checks. ~228 assertions in about twelve seconds.
+- **`test/net.mjs`** — the host builds a real snapshot, the client consumes it, and the
+  two worlds are compared field by field. Also checks input travelling back and
+  bandwidth under load.
+- **`test/imports.mjs`** — every named import resolves to a real export.
 
-**On your own**, you pick your own drop site — click where you want to land, or dither
-and the ship picks for you.
+The harness exists because testing the old build meant staring at a browser, and a
+hidden tab stops calling `requestAnimationFrame` — which made several measurements
+during development simply wrong. A twenty-minute mission now takes about a second and a
+crash is a stack trace instead of a frozen tab.
 
-**In a squad, you do not redeploy yourself.** You lie there watching a squadmate's
-shoulder until one of them punches in the **REINFORCE** stratagem — `↑ ↓ → ← ↑` — and
-throws the beacon. Whoever has been waiting longest comes down at it, on their feet
-with a fresh kit. The call is refused, and costs nothing, if nobody is actually down.
+`test/prune.mjs` is a one-shot tidy that removes imported names a file never uses.
 
-If the *whole* squad goes down at once there is nobody left to make the call, so after
-six seconds the ship makes it for you — **as many Helldivers as there are reinforcements
-left, last to fall first back up**, all landing on the ground the last one lost. If the
-budget only covers some of you, the rest stay down and have to be called by whoever got
-up. When the budget is gone and everyone is down, that is the mission.
-
-The stratagem does not appear at all in a solo game.
-
-## Soundtrack
-
-The game ships with an original procedural score that layers up as the horde thickens.
-To use your own music instead, drop an `ost.mp3` next to `index.html` (it is picked up
-automatically) or choose a file from the menu. A missing `ost.mp3` logs one harmless
-404 and the built-in score plays.
-
-## How the multiplayer works
-
-Host-authoritative. The host's machine runs the entire simulation; every other player
-sends input roughly 20 times a second and receives world snapshots 12 times a second,
-interpolating between them. A snapshot carries every Helldiver, so each client draws
-its squadmates with name tags and health bars.
-
-Everything the host sends carries an id, so a body is *carried* from where it was
-drawn to where the host says it is, arriving exactly as the next snapshot lands. The
-earlier code rebuilt those lists twelve times a second, which cannot be interpolated
-at all -- it can only blink. Tracers are the exception: a bullet flies straight at a
-known speed, so once seen it is simulated locally and stays perfectly smooth.
-
-Your own Helldiver is **predicted** locally — your walking and your muzzle flash happen
-on your keypress, and the host's word is eased in rather than snapped, so a round trip
-never shows up as lag on your own body. Squadmates are pure interpolation.
-
-- The city is sent once on join (~9,000 cells) and then only as deltas, because every
-  change to it funnels through `killCell` / `smashCells` / `restoreCell`.
-- Enemies are culled to 1,500 units around the *nearest* Helldiver and quantised to
-  integers. A busy snapshot is a few KB.
-- Explosions, kills, gunshots and cell changes travel as events; each side plays its
-  own sound and particles from them, attenuated by how far away they happened.
-- So does everything else the world does. Only the host simulates a building coming
-  down, a hellpod landing, a Fleshmob bringing its arms down or a Helldiver slapping a
-  fresh magazine in, so all of it is raised as a **world event** and replayed on every
-  machine, each judging the range from where its own listener stands. A building sends
-  the start and the end of its collapse, so the animation is driven by the host rather
-  than by a parallel timer that could drift.
-- Damage flashes and stim effects are addressed to one player id, so only the body it
-  happened to feels it — and a shooter never gets their own gunshot replayed to them.
-- Input is routed by sender: your keys only ever move your own Helldiver, and a
-  spectator's keyboard addresses nobody.
-
-**Known limitation:** browsers pause `requestAnimationFrame` in background tabs, so the
-host must keep its window visible or the simulation stalls for everybody. This only
-matters if you try to run two roles on one machine.
-
-## Difficulty
-
-The mission settings panel is the difficulty dial, and the host owns it. **HORDE RAMP**
-sets how often the horde level climbs, **ENEMIES TOUGHEN** how much of that goes into
-their health, **GM INCOME** and **INCOME RAMPS** how fast the Game Master can spend.
-**SQUAD SCALING** is co-op only: how much thicker the swarm gets per extra Helldiver
-(default +35% each, or turn it off so friends are pure upside). The four presets —
-SWARM, ELITE, BOTH, FLAT — are starting points, not limits.
-
-**Friendly fire** is two separate dials, both **off by default**:
-
-- **TEAM FIRE** — how much of a squadmate's round or blast lands on you.
-- **SENTRY FIRE** — the same for your own turrets, their gunfire and their cook-off.
-
-Neither one touches what your **own** ordnance does to you. Standing under your own
-500KG is the deal you made, and a frag at your feet is still a frag at your feet.
-A round never hits the Helldiver who fired it either. Hellpods still flatten whoever
-is underneath regardless — that is gravity, not friendly fire — and nothing the horde
-or a collapsing building does is affected by these at all.
+There is also a read-only `window.HD` handle in the browser console (`HD.S` is the
+world, `HD.lastError` is the last exception the loop swallowed) for looking at a bug
+rather than guessing at it.
