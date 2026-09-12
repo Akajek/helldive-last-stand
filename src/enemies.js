@@ -6,22 +6,20 @@
  * idle noises, the footfalls) locally -- which costs no bandwidth at all and is
  * why a Bile Titan sounds the same on every screen. */
 'use strict';
-import { rand, randi, clamp, TAU, pick, dist, angLerp, angDiff, segHit } from './util.js';
+import { rand, clamp, TAU, dist, angLerp, segHit } from './util.js';
 import { CFG } from './config.js';
 import {
-  S, nid, spark, blast, puff, decal, eachDiver, nearestDiver, anchorDist,
-  falloff, shakeAt, isHost, sim, say, earDist
+  S, spark, decal, eachDiver, nearestDiver, anchorDist, falloff, shakeAt, isHost, sim,
+  earDist
 } from './state.js';
 import { SFX, sndAt, A } from './audio.js';
 import { worldEv, capeBlast } from './events.js';
 import { post } from './outbox.js';
-import { TROOPS, TROOP_IDS, FACTIONS, SIZE, PROJ, armorScale } from './data.js';
+import { TROOPS, TROOP_IDS, FACTIONS, SIZE } from './data.js';
 import {
   resolveCircle, losClear, solidAt, smashCells, damageArea, spawnPoint, CELL, freeSpot
 } from './world.js';
-import {
-  damageEnemy, explode, hurt, spawnEBullet, addBeam, arcChain, HOOKS
-} from './combat.js';
+import { damageEnemy, explode, hurt, spawnEBullet, HOOKS } from './combat.js';
 
 /* ============================ SPAWNING ============================ */
 export function spawnEnemy(troopId, opts) {
@@ -549,20 +547,47 @@ function separation(dt) {
    machine measures the range from its own listener, a Titan four blocks away is
    a distant boom to you and a wall of sound to whoever is standing under it. */
 function footsteps(e, dt) {
-  if (!SIZE[e.size].foot) return;
   const moving = Math.hypot(e.vx, e.vy);
   if (moving < 20) return;
+  const SZ = SIZE[e.size];
+  const d = earDist(e.x, e.y);
+  /* nothing off-screen leaves footprints; this runs for every body every frame */
+  if (d > (SZ.foot ? SZ.hear : 1000)) return;
   e.footT -= dt * (moving / Math.max(40, e.spd));
   if (e.footT > 0) return;
-  e.footT = e.T.fly ? 99 : rand(0.48, 0.62);
-  const reach = SIZE[e.size].hear;
-  if (earDist(e.x, e.y) > reach) return;
-  const f = falloff(e.x, e.y, reach);
-  sndAt(f, e.fac === 'automaton' ? SFX.autoStomp : SFX.footL);
-  if (f > 0.25) shakeAt(e.x, e.y, 3, 0, reach);
-  for (let i = 0; i < 4; i++)
-    spark(e.x + rand(-e.r, e.r), e.y + e.r * 0.6 + rand(-6, 6),
-          rand(-40, 40), rand(-50, -10), rand(0.25, 0.6), '#6a6152', rand(2, 5));
+
+  if (e.T.fly) {
+    /* the floating ones do not walk -- they leave a wake */
+    e.footT = 0.1;
+    spark(e.x + rand(-e.r * 0.5, e.r * 0.5), e.y - (e.z || 0) + rand(-4, 4),
+          -e.vx * 0.1, -e.vy * 0.1, rand(0.3, 0.7), FACTIONS[e.fac].col2, rand(2, 4));
+    return;
+  }
+  if (e.size === 'large') {
+    e.footT = rand(0.48, 0.62);
+    const f = falloff(e.x, e.y, SZ.hear);
+    sndAt(f, e.fac === 'automaton' ? SFX.autoStomp : SFX.footL);
+    if (f > 0.25) shakeAt(e.x, e.y, 3, 0, SZ.hear);
+    for (let i = 0; i < 4; i++)
+      spark(e.x + rand(-e.r, e.r), e.y + e.r * 0.6 + rand(-6, 6),
+            rand(-40, 40), rand(-50, -10), rand(0.25, 0.6), '#6a6152', rand(2, 5));
+    return;
+  }
+  if (e.size === 'medium') {
+    e.footT = rand(0.3, 0.42);
+    /* close enough to hear its feet as well as see them */
+    if (d < 520) sndAt(falloff(e.x, e.y, 520) * 0.5,
+                       e.fac === 'automaton' ? SFX.autoStomp : SFX.thud);
+    for (let i = 0; i < 2; i++)
+      spark(e.x + rand(-e.r * 0.6, e.r * 0.6), e.y + e.r * 0.5,
+            rand(-26, 26), rand(-34, -6), rand(0.2, 0.45), '#5e564a', rand(2, 4));
+    return;
+  }
+  /* small: one scuff, and only when it is close enough to make it out */
+  e.footT = rand(0.22, 0.36);
+  if (d > 650) return;
+  spark(e.x + rand(-6, 6), e.y + e.r * 0.5, rand(-18, 18), rand(-24, -4),
+        rand(0.15, 0.3), '#584f44', 2);
 }
 let ambT = 0;
 function ambience(dt) {

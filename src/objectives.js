@@ -6,18 +6,17 @@
  * a whole district, a silenced broadcast turns the horde on itself, and every
  * completion takes credits out of their pocket. */
 'use strict';
-import { rand, clamp, TAU, pick, dist, shuffle } from './util.js';
+import { rand, clamp, TAU, pick } from './util.js';
 import { CFG } from './config.js';
 import {
-  S, nid, say, spark, blast, puff, decal, eachDiver, nearestDiver, anchorDist,
-  sim, isHost, falloff, later, addShake
+  S, nid, say, spark, blast, eachDiver, anchorDist, sim, isHost, falloff, later
 } from './state.js';
 import { SFX, sndAt } from './audio.js';
 import { worldEv } from './events.js';
-import { post, postArr } from './outbox.js';
+import { postArr } from './outbox.js';
 import { OBJECTIVES, OBJ_IDS, REWARD_TEXT, STRATS } from './data.js';
-import { spawnPoint, solidAt, freeSpot, openSpot } from './world.js';
-import { explode, hurt } from './combat.js';
+import { spawnPoint, solidAt, openSpot } from './world.js';
+import { explode } from './combat.js';
 import { INTERACT, PICKHOOK } from './diver.js';
 
 export const OBJ = { nextAt: 0, done: 0, failed: 0, hook: null };

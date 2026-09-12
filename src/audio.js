@@ -6,7 +6,7 @@
  * may start. `sfxDist` is a 0..1 multiplier the callers set from how far away the
  * thing happened, so a rifle two blocks over is not in your ear. */
 'use strict';
-import { VOL, UI } from './config.js';
+import { VOL } from './config.js';
 import { clamp } from './util.js';
 
 export const A = {

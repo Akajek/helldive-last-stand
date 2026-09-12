@@ -1,18 +1,13 @@
 /* Drawing. Nothing in here changes the world -- it only looks at it. */
 'use strict';
-import { rand, clamp, TAU, ease, angLerp } from './util.js';
-import { UI, CFG } from './config.js';
-import {
-  S, amGM, isClient, role, livingDiver, earDist, falloff
-} from './state.js';
-import { MUS } from './audio.js';
-import {
-  G, CELL, gIndex, buildings, rubble, solidAt, BCELL
-} from './world.js';
-import { FACTIONS, TROOPS, SIZE, SENTRIES, WEAPONS, PROJ, OBJECTIVES } from './data.js';
+import { rand, clamp, TAU } from './util.js';
+import { UI } from './config.js';
+import { S, livingDiver } from './state.js';
+import { G, CELL, gIndex, buildings, rubble } from './world.js';
+import { FACTIONS, SENTRIES, WEAPONS, OBJECTIVES } from './data.js';
 import { sporeLevel } from './objectives.js';
-import { W_, A_ } from './diver.js';
-import { mouse, myPod } from './sim.js';
+import { W_ } from './diver.js';
+import { mouse } from './sim.js';
 
 export let cv = null, ctx = null, lightCv = null, lctx = null;
 export function bindCanvas(c) {

@@ -11,10 +11,12 @@
  * a Super Destroyer hitting the ground is the whole map. */
 'use strict';
 import { SFX, sndAt } from './audio.js';
-import { S, shakeAt, falloff, say, eachDiver, spark, blast, isHost, decal } from './state.js';
-import { rand, TAU, clamp } from './util.js';
-import { OUT, postArr } from './outbox.js';
-import { buildings, startCollapse } from './world.js';
+import {
+  S, shakeAt, falloff, say, eachDiver, spark, blast, isHost, decal
+} from './state.js';
+import { rand, TAU } from './util.js';
+import { postArr } from './outbox.js';
+import { buildings } from './world.js';
 
 export const EVENT = {
   /* ---- the city ---- */

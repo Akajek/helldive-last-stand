@@ -7,14 +7,12 @@
 'use strict';
 import { el, rand, clamp, TAU, pick } from './util.js';
 import { CFG } from './config.js';
-import {
-  S, amGM, nearestDiver, anchorDist, eachDiver, spark, say, isHost, falloff
-} from './state.js';
-import { SFX, sndAt } from './audio.js';
+import { S, amGM, nearestDiver, anchorDist, eachDiver, spark, say } from './state.js';
+import { SFX } from './audio.js';
 import { worldEv } from './events.js';
-import { FACTIONS, FACTION_IDS, TROOPS, palette, SIZE } from './data.js';
+import { FACTIONS, FACTION_IDS, palette } from './data.js';
 import { spawnEnemy } from './enemies.js';
-import { pointInWall, spawnPoint, solidAt, openSpot } from './world.js';
+import { solidAt, openSpot } from './world.js';
 import { HOOKS } from './combat.js';
 import { blockedSpawn } from './director.js';
 import { GMPENALTY } from './objectives.js';

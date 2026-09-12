@@ -1,18 +1,13 @@
 /* The Helldiver's furniture: readouts, chips, the tactical map, and the screen
    where you pick what you are bringing. */
 'use strict';
-import { el, clamp, TAU, fmtTime, rand } from './util.js';
-import { CFG, UI, LOADOUT, loadoutSave } from './config.js';
-import {
-  S, amGM, isClient, role, isSquad, livingDiver, earDist, falloff
-} from './state.js';
-import { A, MUS } from './audio.js';
-import {
-  STRATS, STRAT_BY_ID, LOADOUT_POOL, WEAPONS, FACTIONS, TROOPS, SIZE, MAPS, OBJECTIVES
-} from './data.js';
-import { W_, A_, loadoutStrats, KIT } from './diver.js';
-import { buildings, G, CELL, gIndex } from './world.js';
-import { DIR, WAVE_LEN } from './director.js';
+import { el, clamp, TAU, fmtTime } from './util.js';
+import { CFG, LOADOUT, loadoutSave } from './config.js';
+import { S, amGM, isClient, isSquad } from './state.js';
+import { A } from './audio.js';
+import { STRATS, STRAT_BY_ID, LOADOUT_POOL, WEAPONS, FACTIONS } from './data.js';
+import { W_, A_, loadoutStrats } from './diver.js';
+import { G, CELL, gIndex } from './world.js';
 import { jammerNear } from './objectives.js';
 
 export const GLYPH = { U: '↑', D: '↓', L: '←', R: '→' };

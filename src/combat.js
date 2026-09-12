@@ -1,16 +1,16 @@
 /* Who hurts whom, and what it looks like when they do. */
 'use strict';
-import { rand, clamp, TAU, segHit, dist } from './util.js';
+import { rand, TAU, segHit, dist } from './util.js';
 import { CFG } from './config.js';
 import {
-  S, eachDiver, nid, spark, blast, puff, decal, say, shakeAt, falloff, earshot,
-  isHost, isClient, sim, amGM, diverById, nearestDiver, anchorDist, addShake, later
+  S, eachDiver, nid, spark, blast, decal, say, shakeAt, falloff, earshot, isHost, sim,
+  amGM, anchorDist, addShake
 } from './state.js';
 import { SFX, sndAt, A } from './audio.js';
-import { worldEv, capeBlast } from './events.js';
+import { capeBlast } from './events.js';
 import { post, postArr } from './outbox.js';
-import { armorScale, RICOCHET, TROOPS, FACTIONS, PROJ, WEAPONS } from './data.js';
-import { damageArea, collapseNear, damageCellAt, solidAt, freeSpot, CELL } from './world.js';
+import { armorScale, RICOCHET, FACTIONS, PROJ } from './data.js';
+import { damageArea, collapseNear, damageCellAt, solidAt } from './world.js';
 
 /* who gets told when a Helldiver goes down, so the GM can be paid for it */
 export const HOOKS = { onDiverDown: null, onKill: null, onMissionEnd: null };

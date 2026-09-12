@@ -5,18 +5,15 @@
  * bodies it does not control, and an implicit subject is how a stim ends up
  * healing the wrong person. */
 'use strict';
-import { rand, clamp, TAU, ease, dist, segHit } from './util.js';
-import { CFG, LOADOUT } from './config.js';
-import {
-  S, nid, spark, puff, say, earshot, addShake, isHost, isClient, sim,
-  eachDiver, diverById, falloff
-} from './state.js';
+import { rand, clamp, TAU, ease, dist } from './util.js';
+import { LOADOUT } from './config.js';
+import { S, nid, spark, say, earshot, addShake, isHost, sim, falloff } from './state.js';
 import { SFX, sndAt } from './audio.js';
-import { worldEv, capeInit, capeUpdate, capeBlast } from './events.js';
+import { worldEv, capeUpdate } from './events.js';
 import { post, postArr } from './outbox.js';
-import { WEAPONS, STRATS, STRAT_BY_ID, SUPPORT_IDS, WEP_SND_IDX, armorScale, TROOPS } from './data.js';
-import { resolveCircle, damageCellAt, solidAt, CELL } from './world.js';
-import { damageEnemy, spawnBullet, arcChain, hurt, die, explode, ignite, stimFx } from './combat.js';
+import { WEAPONS, STRATS, STRAT_BY_ID, SUPPORT_IDS, WEP_SND_IDX } from './data.js';
+import { resolveCircle, damageCellAt } from './world.js';
+import { damageEnemy, spawnBullet, arcChain, hurt, die, stimFx } from './combat.js';
 
 export const KIT = { grenades: 4, stims: 4, maxGrenades: 6, maxStims: 6 };
 

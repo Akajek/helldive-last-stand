@@ -1,42 +1,40 @@
 /* Wiring: the canvas, the keyboard, the menus and the loop. */
 'use strict';
-import { el, clamp, rand, TAU, fmtTime } from './util.js';
+import { el, fmtTime } from './util.js';
 import {
-  CFG, PRESETS, UI, VOL, LOADOUT, uiSave, volSave, cfgSave, loadoutSave,
-  myName, activeFactions
+  CFG, PRESETS, UI, VOL, LOADOUT, uiSave, volSave, cfgSave, myName, activeFactions
 } from './config.js';
-import {
-  S, amGM, setRole, role, isHost, isClient, isSolo, say, isSquad, nearestDiver,
-  diverById, livingDiver, eachDiver
-} from './state.js';
+import { S, amGM, setRole, role, isHost, isClient, say, isSquad } from './state.js';
 import {
   A, SFX, audioInit, applyVolume, setMuted, refillBudget, musicStart, musicStop,
-  musicToggle, musicApplyVolume, useExternalTrack, probeExternalTrack, MUS
+  musicToggle, musicApplyVolume, useExternalTrack, probeExternalTrack
 } from './audio.js';
-import { STRATS, STRAT_BY_ID, MAPS, MAP_IDS, FACTIONS, FACTION_IDS, WEAPONS } from './data.js';
-import { buildMap, mapSeed } from './world.js';
+import { STRATS, STRAT_BY_ID, FACTIONS } from './data.js';
+import { buildMap } from './world.js';
 import { setCollapseHooks } from './world.js';
 import { worldEv } from './events.js';
-import { bindFlash, hurt, die } from './combat.js';
+import { bindFlash, hurt } from './combat.js';
 import {
-  reload, tryPickup, throwNade, meleeSwing, useStim, equipSlot, loadoutStrats,
-  hasStrat, LOADHOOK, giveSupport
+  reload, tryPickup, throwNade, meleeSwing, useStim, equipSlot, loadoutStrats, LOADHOOK
 } from './diver.js';
-import { throwStratagem, reinforceAt, jammedAt } from './strat.js';
-import { seafBarrage } from './objectives.js';
+import { throwStratagem, reinforceAt } from './strat.js';
 import {
-  update, reset, healthEase, keys, mouse, NETIN, ENDHOOK, GMTICK, GMCAM, endMission
+  update, reset, healthEase, keys, mouse, NETIN, ENDHOOK, GMTICK, GMCAM
 } from './sim.js';
 import { bindCanvas, draw, GMDRAW } from './render.js';
-import { hud, drawMinimap, bindHud, bindMinimap, CODE, ARROW, GLYPH, loadoutRender, LOADUI } from './hud.js';
 import {
-  NET, LOBBY, LOBBYUI, NETHOOK, CFGHOOK, netOpen, netQuit, netSend, netAct,
-  netStatus, lobbyBroadcast, lobbySetMode, lobbyWant, lobbyCount, lobbyLocked,
-  lobbyOpen, lobbyClose, setMyName, sendMyLoadout
+  hud, drawMinimap, bindHud, bindMinimap, CODE, ARROW, loadoutRender, LOADUI
+} from './hud.js';
+import {
+  NET, LOBBY, LOBBYUI, NETHOOK, CFGHOOK, netOpen, netQuit, netSend, netAct, netStatus,
+  lobbyBroadcast, lobbySetMode, lobbyWant, lobbyCount, lobbyLocked, lobbyClose,
+  setMyName, sendMyLoadout
 } from './net.js';
 import { netSnapshot, netSendCity, netSendOver, hostInput } from './host.js';
-import { clientCity, clientSnap, updateClient, clientCode, clearMaps, CITYHOOK, GMSHADOW } from './client.js';
-import { GM, gmReset, gmUpdate, gmKey, gmDraw, gmHud, gmTrySpawn, GM_MIN_RANGE } from './gm.js';
+import {
+  clientCity, clientSnap, updateClient, clientCode, clearMaps, CITYHOOK
+} from './client.js';
+import { GM, gmReset, gmUpdate, gmKey, gmDraw, gmHud, gmTrySpawn } from './gm.js';
 
 /* ============================ CANVAS ============================ */
 const cv = el('c');

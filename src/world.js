@@ -8,8 +8,8 @@
  * Generation is seeded, so the host sends four bytes and the joining Helldiver
  * builds the identical city or cave locally instead of downloading it. */
 'use strict';
-import { clamp, rand, randi, TAU, mulberry, shuffle } from './util.js';
-import { S, eachDiver, nid, spark, blast, say } from './state.js';
+import { clamp, rand, TAU, mulberry, shuffle } from './util.js';
+import { S, eachDiver, spark } from './state.js';
 import { MAPS } from './data.js';
 
 export const CELL = 30;

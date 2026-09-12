@@ -4,23 +4,22 @@
  * clock through later(), so they stop when the mission pauses, die when it ends,
  * and cannot fire into a world that has already been rebuilt. */
 'use strict';
-import { rand, clamp, TAU, dist, ease, angLerp, segHit } from './util.js';
-import { CFG } from './config.js';
+import { rand, clamp, TAU, dist, ease, angLerp } from './util.js';
 import {
-  S, nid, spark, blast, puff, decal, say, eachDiver, diverById, nearestDiver,
-  isHost, isClient, sim, amGM, later, addShake, falloff, earshot, isSquad, anyDown
+  S, nid, spark, blast, puff, decal, say, eachDiver, diverById, nearestDiver, isHost,
+  sim, amGM, later, addShake, falloff, isSquad, anyDown
 } from './state.js';
 import { SFX, sndAt } from './audio.js';
-import { worldEv, capeInit, capeBlast } from './events.js';
+import { worldEv, capeInit } from './events.js';
 import { post, postArr } from './outbox.js';
-import { STRATS, STRAT_BY_ID, SENTRIES, WEAPONS, SIZE, TROOPS, armorScale } from './data.js';
+import { STRATS, STRAT_BY_ID, SENTRIES, WEAPONS, SIZE } from './data.js';
 import {
-  freeSpot, solidAt, damageArea, collapseNear, losClear, caveMouths, spawnPoint, CELL, buildings
+  freeSpot, solidAt, damageArea, collapseNear, losClear, caveMouths
 } from './world.js';
 import {
   explode, hurt, damageEnemy, spawnBullet, arcChain, addBeam, die, BULLETCOL
 } from './combat.js';
-import { giveSupport, resupply, refit, W_, A_, hasStrat, REINFORCE } from './diver.js';
+import { refit, REINFORCE } from './diver.js';
 import { enemyDie } from './enemies.js';
 
 /* ============================ JAMMING ============================

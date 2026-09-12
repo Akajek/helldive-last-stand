@@ -8,24 +8,22 @@
 import { rand, clamp, TAU, ease, angLerp, el } from './util.js';
 import { CFG, LOADOUT } from './config.js';
 import {
-  S, setRole, nid, say, spark, blast, puff, decal, diverById, livingDiver,
-  earDist, falloff, shakeAt, addShake, isClient, stepTimers
+  S, setRole, nid, say, spark, blast, decal, diverById, livingDiver, earDist, falloff,
+  addShake, stepTimers
 } from './state.js';
-import { SFX, sndAt, A, refillBudget, musicStart, MUS } from './audio.js';
+import { SFX, sndAt, A } from './audio.js';
 import { evPlay, capeInit, capeUpdate } from './events.js';
-import { NET, netSend, netStatus, LOBBY, lobbyClose } from './net.js';
+import { NET, netSend, LOBBY } from './net.js';
 import {
-  STRATS, STRAT_BY_ID, TROOPS, TROOP_IDS, FACTIONS, SIZE, WEAPONS, SLOTW,
-  SENTRIES, PROJ, MAPS, OBJECTIVES, ANG8
+  STRATS, STRAT_BY_ID, TROOPS, TROOP_IDS, SIZE, SLOTW, SENTRIES, PROJ, OBJECTIVES, ANG8
 } from './data.js';
-import { buildMap, G, CELL, gIndex, killCell, restoreCell, resolveCircle, solidAt } from './world.js';
-import { makeDiver, W_, A_, refit } from './diver.js';
+import { buildMap, killCell, restoreCell, resolveCircle } from './world.js';
+import { makeDiver, W_, A_ } from './diver.js';
 import { playDeath } from './enemies.js';
-import { updateBullets, updateEBullets, updateBeams, BULLETCOL, PROJIDX, playerHitFx, stimFx } from './combat.js';
 import {
-  updateBalls, updatePods, updateNades, updateSentries, updateDrones,
-  updateBeamRuns, updateWreck
-} from './strat.js';
+  updateBullets, updateEBullets, updateBeams, BULLETCOL, PROJIDX, playerHitFx, stimFx
+} from './combat.js';
+import { updateSentries, updateDrones, updateBeamRuns, updateWreck } from './strat.js';
 import { reset, NETIN, keys, mouse, fxStep, myPod } from './sim.js';
 import { PICKIDX, WEPIDX, SENIDX, OBJIDX } from './host.js';
 import { CODE } from './hud.js';

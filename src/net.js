@@ -4,9 +4,9 @@
  * input and receive snapshots. The relay in server.js never looks inside a
  * message -- it pairs sockets by room code and forwards bytes. */
 'use strict';
-import { el, clamp } from './util.js';
-import { CFG, LOADOUT, myName, setStoredName, cfgSave } from './config.js';
-import { S, setRole, role, say, isHost } from './state.js';
+import { el } from './util.js';
+import { CFG, LOADOUT, myName, setStoredName } from './config.js';
+import { S, setRole, role, say } from './state.js';
 
 export const NET = {
   ws: null, room: '', hosting: false, peer: false,

@@ -9,18 +9,14 @@
  *     position retransmitted twelve times a second for their whole short life.
  *     With four Helldivers and a Gatling sentry that was most of the traffic. */
 'use strict';
-import { clamp, TAU } from './util.js';
+import { TAU } from './util.js';
 import { CFG } from './config.js';
-import {
-  S, diverById, anchorDist, isHost, say, role, sim
-} from './state.js';
-import { OUT, drain } from './outbox.js';
-import { NET, netSend, LOBBY } from './net.js';
-import { STRATS, STRAT_BY_ID, TROOP_IDS, SIZE, WEAPONS, ANG8 } from './data.js';
+import { S, diverById, isHost } from './state.js';
+import { drain } from './outbox.js';
+import { NET, netSend } from './net.js';
+import { STRATS, STRAT_BY_ID, TROOP_IDS, ANG8 } from './data.js';
 import { netCK, netCA, mapSeed } from './world.js';
-import {
-  reload, tryPickup, throwNade, meleeSwing, useStim, equipSlot, W_, A_
-} from './diver.js';
+import { reload, tryPickup, throwNade, meleeSwing, useStim, equipSlot } from './diver.js';
 import { throwStratagem, reinforceAt } from './strat.js';
 import { GM } from './gm.js';
 

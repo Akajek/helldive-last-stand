@@ -10,13 +10,10 @@
 'use strict';
 import { rand, randi, clamp, TAU, pick, shuffle } from './util.js';
 import { CFG, activeFactions } from './config.js';
-import {
-  S, say, squadMul, nearestDiver, anchorDist, sim, isHost, spark, falloff
-} from './state.js';
-import { SFX, sndAt } from './audio.js';
+import { S, say, squadMul, sim } from './state.js';
 import { worldEv } from './events.js';
-import { FACTIONS, FACTION_IDS, TROOPS, troopsOf, SIZE } from './data.js';
-import { spawnEnemy, countSize, countTroop } from './enemies.js';
+import { FACTIONS, troopsOf } from './data.js';
+import { spawnEnemy } from './enemies.js';
 import { spawnPoint, solidAt, openSpot } from './world.js';
 
 export const WAVE_LEN = 60;

@@ -1,31 +1,25 @@
 /* One frame of the world, on the machine that owns it. */
 'use strict';
-import { rand, clamp, TAU, ease, dist } from './util.js';
+import { TAU, ease } from './util.js';
 import { CFG, LOADOUT } from './config.js';
-import {
-  S, nid, say, eachDiver, diverById, nearestDiver, livingDiver, anyDown, isSquad,
-  liveCount, squadMul, amGM, isHost, isClient, sim, stepTimers, spark, blast,
-  addShake, setRole, role, earshot, falloff
-} from './state.js';
-import { SFX, sndAt, MUS, refillBudget } from './audio.js';
-import { worldEv, capeInit, capeUpdate } from './events.js';
+import { S, say, livingDiver, isSquad, amGM, sim, stepTimers, role } from './state.js';
+import { SFX, MUS } from './audio.js';
+import { worldEv, capeInit } from './events.js';
 import { clearOut } from './outbox.js';
-import { STRATS, STRAT_BY_ID, MAPS, TROOPS } from './data.js';
 import {
-  buildMap, updateCollapses, updateRebuild, startRebuild, REBUILD_EVERY,
-  resolveCircle, freeSpot, netCK, netCA, clearBGrid, caveMouths, openSpot
+  updateCollapses, updateRebuild, startRebuild, REBUILD_EVERY, netCK, netCA, openSpot
 } from './world.js';
-import { makeDiver, updateDiver, freshInput, W_, A_, refit, KIT } from './diver.js';
+import { makeDiver, updateDiver } from './diver.js';
 import {
-  updateBullets, updateEBullets, updateBeams, updateStatus, hurt, die, explode, HOOKS
+  updateBullets, updateEBullets, updateBeams, updateStatus, hurt
 } from './combat.js';
-import { updateEnemies, spawnEnemy } from './enemies.js';
+import { updateEnemies } from './enemies.js';
 import {
-  updateBalls, updatePods, updateNades, updateSentries, updateDrones,
-  updateBeamRuns, updateWreck, dropPod, reinforceAt
+  updateBalls, updatePods, updateNades, updateSentries, updateDrones, updateBeamRuns,
+  updateWreck, dropPod, reinforceAt
 } from './strat.js';
-import { updateDirector, resetDirector, seedOpening, DIR } from './director.js';
-import { updateObjectives, resetObjectives, sporeLevel, OBJ } from './objectives.js';
+import { updateDirector, resetDirector, seedOpening } from './director.js';
+import { updateObjectives, resetObjectives } from './objectives.js';
 
 export const NETIN = { roster: null, mapId: 'megacity', seed: 1, myId: -1 };
 export const keys = {};
