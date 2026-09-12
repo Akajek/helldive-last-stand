@@ -291,50 +291,80 @@ function drawBug(e, T, body, dark) {
     }
   }
 }
-/* ---- Automaton: flat plates, one red eye, and a lot of right angles ---- */
+/* ---- Automaton: flat plates, one red eye, and a lot of right angles.
+   Everything is longer than it is wide, so which way it is facing reads at a
+   glance -- a square body just turns into a diamond and tells you nothing. ---- */
 function drawBot(e, T, body, dark) {
-  const r = e.r, step = Math.sin(e.t * 8) * r * 0.2;
+  const r = e.r, step = Math.sin(e.t * 8) * r * 0.28;
+
+  /* legs, striding */
+  ctx.strokeStyle = dark; ctx.lineWidth = Math.max(2.5, r * 0.2);
+  ctx.lineCap = 'butt';
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.15, -r * 0.42); ctx.lineTo(-r * 0.15 + step, -r * 0.95);
+  ctx.moveTo(-r * 0.15, r * 0.42); ctx.lineTo(-r * 0.15 - step, r * 0.95);
+  ctx.stroke();
+
+  /* torso: a slab, with the back plate darker so the front is obvious */
   ctx.fillStyle = dark;
-  ctx.fillRect(-r * 0.2, -r * 0.95 + step, r * 0.55, r * 0.35);
-  ctx.fillRect(-r * 0.2, r * 0.6 - step, r * 0.55, r * 0.35);
+  ctx.fillRect(-r * 0.95, -r * 0.5, r * 0.5, r * 1.0);
   ctx.fillStyle = body;
-  ctx.fillRect(-r * 0.75, -r * 0.62, r * 1.35, r * 1.24);
+  ctx.fillRect(-r * 0.5, -r * 0.52, r * 1.15, r * 1.04);
+  /* shoulder pauldrons */
   ctx.fillStyle = dark;
-  ctx.fillRect(-r * 0.75, -r * 0.62, r * 1.35, r * 0.22);
-  /* head */
+  ctx.fillRect(-r * 0.35, -r * 0.78, r * 0.6, r * 0.28);
+  ctx.fillRect(-r * 0.35, r * 0.5, r * 0.6, r * 0.28);
+
+  /* head, jutting forward, with the eye everyone learns to look for */
   ctx.fillStyle = dark;
-  ctx.fillRect(r * 0.5, -r * 0.34, r * 0.48, r * 0.68);
+  ctx.fillRect(r * 0.6, -r * 0.3, r * 0.5, r * 0.6);
+  ctx.fillStyle = 'rgba(255,59,47,.35)';
+  ctx.fillRect(r * 0.95, -r * 0.22, r * 0.3, r * 0.44);
   ctx.fillStyle = '#ff3b2f';
-  ctx.fillRect(r * 0.86, -r * 0.1, r * 0.2, r * 0.2);
-  if (T.shield) {                          /* the slab it hides behind */
-    ctx.fillStyle = '#6a6f76';
-    ctx.fillRect(r * 0.55, -r * 1.0, r * 0.3, r * 2.0);
-    ctx.strokeStyle = '#3a3f46'; ctx.lineWidth = 2;
-    ctx.strokeRect(r * 0.55, -r * 1.0, r * 0.3, r * 2.0);
-  }
-  if (T.saw) {
-    const sa = e.t * 40;
-    ctx.strokeStyle = '#c8c8c8'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(r * 1.1, 0, r * 0.42, sa, sa + 4.2); ctx.stroke();
-  }
-  if (T.ranged) {
+  ctx.fillRect(r * 1.0, -r * 0.11, r * 0.22, r * 0.22);
+
+  if (T.ranged && !T.boss) {               /* the rifle it is pointing at you */
     ctx.fillStyle = '#2a2d31';
-    ctx.fillRect(r * 0.5, r * 0.18, r * (T.boss ? 1.5 : 0.9), r * 0.2);
-    if (T.boss) ctx.fillRect(r * 0.5, -r * 0.38, r * 1.5, r * 0.2);
+    ctx.fillRect(r * 0.35, r * 0.22, r * 1.15, r * 0.18);
+    ctx.fillStyle = dark;
+    ctx.fillRect(r * 0.3, r * 0.12, r * 0.3, r * 0.34);
   }
-  if (T.boss) {                            /* the Strider's four legs and its gantry */
-    ctx.strokeStyle = dark; ctx.lineWidth = r * 0.12;
+  if (T.shield) {                          /* the slab it hides behind */
+    ctx.fillStyle = '#7a8088';
+    ctx.fillRect(r * 0.6, -r * 1.05, r * 0.34, r * 2.1);
+    ctx.fillStyle = '#575d64';
+    ctx.fillRect(r * 0.6, -r * 1.05, r * 0.34, r * 0.5);
+    ctx.strokeStyle = '#2f343a'; ctx.lineWidth = 2;
+    ctx.strokeRect(r * 0.6, -r * 1.05, r * 0.34, r * 2.1);
+  }
+  if (T.saw) {                             /* two of them, and they are spinning */
+    const sa = e.t * 40;
+    ctx.strokeStyle = '#d2d2d2'; ctx.lineWidth = 3;
+    for (const sy of [-r * 0.55, r * 0.55]) {
+      ctx.beginPath(); ctx.arc(r * 0.95, sy, r * 0.4, sa, sa + 4.2); ctx.stroke();
+    }
+    ctx.strokeStyle = dark; ctx.lineWidth = Math.max(2, r * 0.16);
+    ctx.beginPath();
+    ctx.moveTo(r * 0.2, -r * 0.4); ctx.lineTo(r * 0.9, -r * 0.55);
+    ctx.moveTo(r * 0.2, r * 0.4); ctx.lineTo(r * 0.9, r * 0.55);
+    ctx.stroke();
+  }
+  if (T.boss) {                            /* the Strider: four legs and a gantry */
+    ctx.strokeStyle = dark; ctx.lineWidth = r * 0.13;
     for (let i = 0; i < 4; i++) {
       const side = i < 2 ? -1 : 1, k = i % 2;
-      const bx = -r * 0.4 + k * r * 0.7;
-      const sw = Math.sin(e.t * 4 + i * 1.7) * r * 0.3;
+      const bx = -r * 0.45 + k * r * 0.8;
+      const sw = Math.sin(e.t * 4 + i * 1.7) * r * 0.32;
       ctx.beginPath();
       ctx.moveTo(bx, side * r * 0.5);
-      ctx.lineTo(bx + sw, side * r * 1.5);
+      ctx.lineTo(bx + sw, side * r * 1.55);
       ctx.stroke();
     }
-    ctx.fillStyle = 'rgba(255,60,45,.25)';
-    ctx.fillRect(-r * 0.9, -r * 0.2, r * 0.35, r * 0.4);
+    ctx.fillStyle = '#2a2d31';
+    ctx.fillRect(r * 0.3, -r * 0.5, r * 1.5, r * 0.22);
+    ctx.fillRect(r * 0.3, r * 0.28, r * 1.5, r * 0.22);
+    ctx.fillStyle = 'rgba(255,60,45,.3)';
+    ctx.fillRect(-r * 0.95, -r * 0.24, r * 0.4, r * 0.48);
   }
 }
 /* ---- Illuminate: smooth, lit from inside, and mostly off the ground ---- */

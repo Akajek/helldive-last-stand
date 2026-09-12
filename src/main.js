@@ -9,11 +9,11 @@ import {
   A, SFX, audioInit, applyVolume, setMuted, refillBudget, musicStart, musicStop,
   musicToggle, musicApplyVolume, useExternalTrack, probeExternalTrack
 } from './audio.js';
-import { STRATS, STRAT_BY_ID, FACTIONS } from './data.js';
-import { buildMap } from './world.js';
-import { setCollapseHooks } from './world.js';
+import { STRATS, STRAT_BY_ID, FACTIONS, TROOPS } from './data.js';
+import { buildMap, setCollapseHooks } from './world.js';
 import { worldEv } from './events.js';
 import { bindFlash, hurt } from './combat.js';
+import { spawnEnemy } from './enemies.js';
 import {
   reload, tryPickup, throwNade, meleeSwing, useStim, equipSlot, loadoutStrats, LOADHOOK
 } from './diver.js';
@@ -678,9 +678,17 @@ document.querySelectorAll('[data-q]').forEach(x => {
   x.className = 'preset' + (x.getAttribute('data-q') === UI.quality ? ' on' : '');
 });
 
-/* A read-only handle on the world for the browser console. Nothing in the game
-   reads it; it is here so a bug can be looked at instead of guessed at. */
-const HD = { S, CFG, GM, NET, LOBBY, LOADOUT, start, version: 2, lastError: null };
+/* A handle on the world for the browser console. Nothing in the game reads it;
+   it is here so a bug can be looked at instead of guessed at.
+     HD.S           the whole world
+     HD.lastError   the last exception the loop swallowed
+     HD.spawn('biletitan', 400, 0)   put one there and see what it does */
+const HD = {
+  S, CFG, GM, NET, LOBBY, LOADOUT, start, version: 2, lastError: null,
+  spawn: (id, x, y) => spawnEnemy(id, { x: x === undefined ? S.cam.x + 300 : x,
+                                        y: y === undefined ? S.cam.y : y }),
+  troops: () => Object.keys(TROOPS)
+};
 window.HD = HD;
 
 /* ---- open on a quiet map so the menu has something behind it ---- */
