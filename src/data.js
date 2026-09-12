@@ -375,14 +375,17 @@ export const MAPS = {
     city: true, cave: false,
     blurb: 'A destructible city block. Everything standing can come down.'
   },
-  cave: {
-    id: 'cave', name: 'THE HIVE', world: 4200,
-    ground: '#100c08', grid: '#1b150e', border: '#5a4428',
-    city: true, cave: true, dark: true, rockHp: 420,
-    blurb: 'Underground. No sky, so nothing can be called down until you break the jammers.'
+  hollows: {
+    id: 'hollows', name: 'THE HOLLOWS', world: 6000,
+    ground: '#1a1710', grid: '#252016', border: '#5a4428',
+    city: true, rockHp: 420, grass: true,
+    /* open ground with cave systems dug into it -- you are underground when you
+       are inside one, and back on the surface when you walk out */
+    caves: { count: 6, rMin: 620, rMax: 1150, outcrops: 120 },
+    blurb: 'Open ground pocked with cave systems. Nothing reaches you inside one.'
   }
 };
-export const MAP_IDS = ['plains', 'megacity', 'cave'];
+export const MAP_IDS = ['plains', 'megacity', 'hollows'];
 
 /* ============================ OBJECTIVES ============================
    Each one is a thing to go and do that pays out. Several of them are aimed

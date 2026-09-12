@@ -12,7 +12,7 @@ import { SFX } from './audio.js';
 import { worldEv } from './events.js';
 import { FACTIONS, FACTION_IDS, palette } from './data.js';
 import { spawnEnemy } from './enemies.js';
-import { solidAt, openSpot } from './world.js';
+import { solidAt, inCave } from './world.js';
 import { HOOKS } from './combat.js';
 import { blockedSpawn } from './director.js';
 import { GMPENALTY } from './objectives.js';
@@ -111,12 +111,7 @@ export function gmTrySpawn(mouse) {
   if (anchorDist(x, y) < GM_MIN_RANGE) return;
   if (Math.abs(x) > S.world - 40 || Math.abs(y) > S.world - 40) return;
   if (blockedSpawn(x, y)) return;
-  if (solidAt(x, y)) {
-    if (!S.map.cave) return;
-    const o = openSpot(x, y, 14);
-    if (solidAt(o.x, o.y)) return;
-    x = o.x; y = o.y;
-  }
+  if (solidAt(x, y)) return;          /* not inside a wall, or inside a hillside */
   if (S.enemies.length > 560) return;
   GM.credits -= u.cost;
   GM.cool = u.cost > 12 ? 0.6 : u.cost > 4 ? 0.35 : 0.09;
@@ -127,7 +122,7 @@ export function gmTrySpawn(mouse) {
     const a = rand(0, TAU);
     spark(x, y, Math.cos(a) * rand(30, 180), Math.sin(a) * rand(30, 180), 0.45, F.col, 3);
   }
-  if (S.map.cave) worldEv('warp', x, y);
+  if (inCave(x, y)) worldEv('warp', x, y);
 }
 
 /* ---- what the Game Master sees over the world ---- */
@@ -149,7 +144,7 @@ export function gmDraw(ctx, mouse) {
   if (!u) return;
   const ok = GM.credits >= u.cost && anchorDist(mouse.wx, mouse.wy) >= GM_MIN_RANGE &&
              !blockedSpawn(mouse.wx, mouse.wy) &&
-             !(S.map.city && !S.map.cave && solidAt(mouse.wx, mouse.wy));
+             !(S.map.city && solidAt(mouse.wx, mouse.wy));
   ctx.strokeStyle = ok ? F.hud : 'rgba(255,80,60,.6)';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(mouse.wx, mouse.wy, u.r, 0, TAU); ctx.stroke();

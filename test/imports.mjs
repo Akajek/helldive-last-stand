@@ -58,6 +58,65 @@ for (const f of files) {
   }
 }
 
+/* ---------------------------------------------------------------------------
+   Calling a function another module exports, without importing it. The check
+   above cannot see this -- there is no import statement to validate -- and it is
+   exactly the mistake that made hud() throw on every frame: `inCave` used, never
+   imported, HUD and minimap silently gone.
+   The rule is narrow on purpose: only flag a name that is CALLED, is exported by
+   some other module in src/, is not imported here, and is not declared here. */
+const allExports = new Map();
+for (const f of files) for (const n of exportsOf[f]) {
+  if (!allExports.has(n)) allExports.set(n, []);
+  allExports.get(n).push(f);
+}
+let undef = 0;
+for (const f of files) {
+  const src = fs.readFileSync(path.join(dir, f), 'utf8');
+  /* comments first, or a name mentioned in prose reads as a call */
+  const body = src.replace(/\/\*[\s\S]*?\*\//g, ' ')
+                  .replace(/^\s*\/\/.*$/gm, ' ')
+                  .replace(/^import[\s\S]*?from\s*['"][^'"]+['"];?$/gm, '')
+                  .replace(/^import\s*['"][^'"]+['"];?$/gm, '');
+  const imported = new Set();
+  for (const imp of importsOf[f]) for (const n of imp.names) imported.add(n);
+
+  /* everything this file provides for itself: declarations, object-literal
+     methods, and -- the one that matters -- parameter names, since a helper
+     passed in as an argument is called exactly like an imported one */
+  const local = new Set(exportsOf[f]);
+  for (const m of body.matchAll(/(?:^|\s)(?:export\s+)?(?:async\s+)?(?:function|class)\s+([A-Za-z_$][\w$]*)/g))
+    local.add(m[1]);
+  for (const m of body.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)) local.add(m[1]);
+  for (const m of body.matchAll(/([A-Za-z_$][\w$]*)\s*[:=]\s*(?:function|\()/g)) local.add(m[1]);
+  /* shorthand methods in an object literal: `hurt() { ... }` */
+  for (const m of body.matchAll(/^\s*([A-Za-z_$][\w$]*)\s*\([^()]*\)\s*\{/gm)) local.add(m[1]);
+  const KEYWORD = /^(if|for|while|switch|catch|return|function|typeof|new|do|else)$/;
+  /* parameter lists, of every shape */
+  const params = [];
+  for (const m of body.matchAll(/(?:function\s*[A-Za-z_$\w]*|\b[A-Za-z_$][\w$]*)\s*\(([^()]*)\)\s*(?:\{|=>)/g))
+    params.push(m[1]);
+  for (const m of body.matchAll(/\(([^()]*)\)\s*=>/g)) params.push(m[1]);
+  for (const p of params)
+    for (const bit of p.split(',')) {
+      const n = bit.trim().replace(/^\.\.\./, '').split(/[\s=:]/)[0];
+      if (/^[A-Za-z_$][\w$]*$/.test(n) && !KEYWORD.test(n)) local.add(n);
+    }
+
+  for (const [name, from] of allExports) {
+    if (imported.has(name) || local.has(name)) continue;
+    if (from.length === 1 && from[0] === f) continue;
+    /* called, and not as a property of something */
+    const esc = name.replace(/[$]/g, '\\$');
+    const re = new RegExp('(?<![.\\w$])' + esc + '\\s*\\(');
+    if (re.test(body)) {
+      console.log(`NOT IMPORTED   ${f}: calls '${name}()' (exported by ${from.join(', ')})`);
+      undef++;
+    }
+  }
+}
+if (undef) bad += undef;
+
 /* imported but never used again in the file: harmless, but usually a leftover */
 for (const f of files) {
   const src = fs.readFileSync(path.join(dir, f), 'utf8');

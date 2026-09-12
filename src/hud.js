@@ -7,7 +7,7 @@ import { S, amGM, isClient, isSquad } from './state.js';
 import { A } from './audio.js';
 import { STRATS, STRAT_BY_ID, LOADOUT_POOL, WEAPONS, FACTIONS } from './data.js';
 import { W_, A_, loadoutStrats } from './diver.js';
-import { G, CELL, gIndex } from './world.js';
+import { G, CELL, gIndex, inCave } from './world.js';
 import { jammerNear } from './objectives.js';
 
 export const GLYPH = { U: '↑', D: '↓', L: '←', R: '→' };
@@ -51,12 +51,14 @@ export function hud() {
   bits.push('LV ' + S.hordeLv);
   bits.push('HOSTILES ' + S.enemies.length);
   bits.push(S.map.name);
-  if (S.map.city && !S.map.cave)
+  if (S.map.city && !S.map.caves)
     bits.push('REBUILD ' + Math.max(0, Math.ceil(S.nextRebuild - S.time)) + 's');
   if (S.mod.confuse > 0) bits.push('COMMS DOWN ' + Math.ceil(S.mod.confuse) + 's');
   if (S.mod.radar > 0) bits.push('RADAR ' + Math.ceil(S.mod.radar) + 's');
-  if (S.map.cave) bits.push(S.mod.uplink > 0
-    ? 'UPLINK OPEN ' + Math.ceil(S.mod.uplink) + 's' : 'NO UPLINK');
+  /* only tell you the sky is gone when it actually is */
+  const under = !!me && inCave(me.x, me.y);
+  if (under) bits.push(S.mod.uplink > 0
+    ? 'UPLINK OPEN ' + Math.ceil(S.mod.uplink) + 's' : 'UNDERGROUND — NO UPLINK');
   if (amGM()) bits.push('GAME MASTER');
   if (isClient()) bits.push(S.ping + 'ms');
   if (A.muted) bits.push('[MUTED]');
@@ -133,7 +135,7 @@ export function hud() {
     const ready = left <= 0;
     const isArmed = !!(me && me.armed === t);
     const blocked = t.kind !== 'reinforce' &&
-                    (!!jam || (S.map.cave && S.mod.uplink <= 0));
+                    (!!jam || (under && S.mod.uplink <= 0));
     let used = '';
     if (t.uses !== undefined && me) {
       const u = (me.uses && me.uses[t.id]) || 0;
@@ -165,11 +167,11 @@ export function bindMinimap() { mmc = el('mm'); mmx = mmc.getContext('2d'); }
 export function drawMinimap() {
   if (!mmx) return;
   const Sz = mmc.width, half = Sz / 2;
-  const R = S.mod.radar > 0 ? 3200 : S.map.cave ? 1100 : 1700;
+  const R = S.mod.radar > 0 ? 3200 : 1700;
   const k = half / R;
   const ox = S.me ? S.me.x : S.cam.x, oy = S.me ? S.me.y : S.cam.y;
   mmx.clearRect(0, 0, Sz, Sz);
-  mmx.fillStyle = S.map.cave ? 'rgba(10,8,6,.85)' : S.map.city ? 'rgba(10,13,20,.8)' : 'rgba(12,16,12,.8)';
+  mmx.fillStyle = S.map.caves ? 'rgba(14,11,7,.82)' : S.map.city ? 'rgba(10,13,20,.8)' : 'rgba(12,16,12,.8)';
   mmx.fillRect(0, 0, Sz, Sz);
   const px = x => half + (x - ox) * k;
   const py = y => half + (y - oy) * k;
@@ -179,8 +181,8 @@ export function drawMinimap() {
 
   /* the standing world, sampled coarsely so this stays cheap */
   if (S.map.city && G.solid) {
-    const step = S.map.cave ? 2 : 3;
-    mmx.fillStyle = S.map.cave ? 'rgba(120,100,70,.5)' : 'rgba(120,150,200,.22)';
+    const step = 3;
+    mmx.fillStyle = S.map.caves ? 'rgba(150,125,85,.45)' : 'rgba(120,150,200,.22)';
     const c0 = Math.floor((ox - R) / CELL), c1 = Math.ceil((ox + R) / CELL);
     const d0 = Math.floor((oy - R) / CELL), d1 = Math.ceil((oy + R) / CELL);
     const sz = Math.max(1, CELL * k * step);

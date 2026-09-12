@@ -39,7 +39,7 @@ export function updateObjectives(dt) {
   if (S.mod.spore > 0) S.mod.spore -= dt;
   if (S.mod.uplink > 0) {
     S.mod.uplink -= dt;
-    if (S.mod.uplink <= 0 && S.map.cave) say('UPLINK LOST — THE ROCK IS BACK', 3);
+    if (S.mod.uplink <= 0 && S.map.caves) say('UPLINK LOST — THE ROCK IS BACK', 3);
   }
 
   for (const o of S.objectives) {
@@ -67,10 +67,10 @@ function spawnObjective(forceId) {
        the whole point -- so it is much more likely down there */
     const pool = OBJ_IDS.filter(k => {
       if (k === 'jammer') return true;
-      if (k === 'spore') return !S.map.cave;
+      return true;
       return true;
     });
-    if (S.map.cave && Math.random() < 0.55) id = 'jammer';
+    if (S.map.caves && Math.random() < 0.4) id = 'jammer';
     else id = pick(pool);
   }
   const D = OBJECTIVES[id];
@@ -195,7 +195,7 @@ export function applyReward(kind, o) {
          reward. Underground there is no sky at all, so breaking one punches a
          temporary hole in the interference -- two minutes to spend everything
          you have been saving. */
-      if (S.map.cave) {
+      if (S.map.caves) {
         S.mod.uplink = 120;
         say('UPLINK OPEN — 120 SECONDS', 4);
       }

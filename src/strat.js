@@ -14,7 +14,7 @@ import { worldEv, capeInit } from './events.js';
 import { post, postArr } from './outbox.js';
 import { STRATS, STRAT_BY_ID, SENTRIES, WEAPONS, SIZE } from './data.js';
 import {
-  freeSpot, solidAt, damageArea, collapseNear, losClear, caveMouths
+  freeSpot, solidAt, damageArea, collapseNear, losClear, inCave, nearestMouth, mouthIndex
 } from './world.js';
 import {
   explode, hurt, damageEnemy, spawnBullet, arcChain, addBeam, die, BULLETCOL
@@ -34,7 +34,7 @@ export function jammedAt(x, y, s) {
   /* Underground NOTHING gets through -- not a pod, not an orbital shell, and not
      an Eagle, which would have to fly through several hundred metres of rock.
      Breaking a jammer punches a hole in the interference and buys a window. */
-  if (S.map.cave && S.mod.uplink <= 0) return 'NO SKY — BREAK A JAMMER';
+  if (inCave(x, y) && S.mod.uplink <= 0) return 'NO SKY — BREAK A JAMMER';
   return false;
 }
 
@@ -180,19 +180,18 @@ export function reinforceAt(x, y, who) {
   P.down = false; P.waiting = 0; P.dead = false;
   /* underground there is nothing to drop through, so they come in on foot from
      the nearest chamber the hive has not sealed */
-  if (S.map.cave) {
-    let best = caveMouths[0] || { x: 0, y: 0 }, bd = Infinity;
-    for (const m of caveMouths) {
-      const d = Math.hypot(m.x - x, m.y - y);
-      if (d < bd) { bd = d; best = m; }
-    }
-    P.inPod = false; P.x = best.x; P.y = best.y; P.vx = 0; P.vy = 0;
+  /* a pod cannot reach you through a hillside, so a Helldiver called into a
+     cave walks in from the nearest mouth instead */
+  if (inCave(x, y)) {
+    const m = nearestMouth(x, y) || { x: 0, y: 0 };
+    const spot = freeSpot(m.x, m.y, 22);
+    P.inPod = false; P.x = spot.x; P.y = spot.y; P.vx = 0; P.vy = 0;
     P.guard = 2.5;
     refit(P);
     capeInit(P);
     worldEv('deploy', P.x, P.y);
-    say(isSquad() ? ((P.name || 'A HELLDIVER') + ' IS BACK — TUNNEL ' + (1 + (caveMouths.indexOf(best) | 0)))
-                  : 'BACK IN THE HIVE', 2.5);
+    say(isSquad() ? ((P.name || 'A HELLDIVER') + ' IS COMING IN ON FOOT — MOUTH ' +
+                     (1 + mouthIndex(m))) : 'COMING IN ON FOOT', 2.5);
     return;
   }
   const spot = freeSpot(clamp(x, -S.world + 40, S.world - 40), clamp(y, -S.world + 40, S.world - 40), 22);

@@ -14,7 +14,7 @@ import { S, say, squadMul, sim } from './state.js';
 import { worldEv } from './events.js';
 import { FACTIONS, troopsOf } from './data.js';
 import { spawnEnemy } from './enemies.js';
-import { spawnPoint, solidAt, openSpot } from './world.js';
+import { solidAt, openSpot, inCave, spawnPoint } from './world.js';
 
 export const WAVE_LEN = 60;
 export const ENEMY_CAP = 520;
@@ -182,16 +182,15 @@ function releaseOne(q) {
     y = clamp(anchor.y + Math.sin(a) * d, -S.world + 60, S.world - 60);
     if (blockedSpawn(x, y)) continue;
     if (solidAt(x, y)) {
-      if (!S.map.cave) continue;
       const o = openSpot(x, y, 12);
       x = o.x; y = o.y;
-      if (blockedSpawn(x, y)) continue;
+      if (solidAt(x, y) || blockedSpawn(x, y)) continue;
     }
     ok = true; break;
   }
   if (!ok) return;
   const e = spawnEnemy(q.tid, { x, y });
-  if (e && S.map.cave) worldEv('warp', x, y);
+  if (e && inCave(x, y)) worldEv('warp', x, y);
 }
 export function blockedSpawn(x, y) {
   const NS = S.mod.noSpawn;

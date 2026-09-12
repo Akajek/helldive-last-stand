@@ -17,12 +17,17 @@ import {
   MAPS, MAP_IDS, STRATS, STRAT_BY_ID, TROOPS, TROOP_IDS, FACTIONS, FACTION_IDS,
   SENTRIES, WEAPONS, OBJECTIVES, OBJ_IDS, armorScale
 } from '../src/data.js';
-import { buildMap, G, CELL, gIndex, solidAt, buildings, caveMouths } from '../src/world.js';
+import {
+  buildMap, G, CELL, gIndex, solidAt, buildings, caveMouths, caveZones, caveDepth,
+  inCave, openSpot
+} from '../src/world.js';
 import { update, reset, NETIN, keys, mouse, endMission } from '../src/sim.js';
 import { spawnEnemy, countSize } from '../src/enemies.js';
 import { DIR, resetDirector, WAVE_LEN } from '../src/director.js';
 import { OBJ, applyReward } from '../src/objectives.js';
-import { throwStratagem, callIn, dropPod, superDestroyer, placeSentry } from '../src/strat.js';
+import {
+  throwStratagem, callIn, dropPod, superDestroyer, placeSentry, jammedAt, reinforceAt
+} from '../src/strat.js';
 import { explode, hurt, die, damageEnemy, arcChain } from '../src/combat.js';
 import { giveSupport, fire, W_, A_, tryPickup, useStim, throwNade, meleeSwing } from '../src/diver.js';
 import { GM, gmReset } from '../src/gm.js';
@@ -103,12 +108,35 @@ for (const id of MAP_IDS) {
   line(`${id.padEnd(9)} world ${S.world}  solid ${(frac * 100).toFixed(1)}%  buildings ${buildings.length}`);
   ok(`${id}: grid allocated`, G.solid && G.solid.length > 0);
   ok(`${id}: drop zone is clear`, !solidAt(0, 0));
-  if (M.cave) {
-    ok('cave: mostly rock', frac > 0.5, `${(frac * 100).toFixed(1)}%`);
-    ok('cave: but not all rock', frac < 0.93, `${(frac * 100).toFixed(1)}%`);
-    ok('cave: has entrances', caveMouths.length > 0, String(caveMouths.length));
+  if (M.caves) {
+    /* a map WITH cave sections, not a map that IS one: mostly open ground */
+    ok('hollows: mostly open ground', frac < 0.25, `${(frac * 100).toFixed(1)}% solid`);
+    ok('hollows: but not featureless', frac > 0.015, `${(frac * 100).toFixed(1)}% solid`);
+    ok('hollows: dug the systems it was asked for',
+       caveZones.length >= M.caves.count - 2 && caveZones.length <= M.caves.count,
+       `${caveZones.length} of ${M.caves.count}`);
+    ok('hollows: every system has mouths', caveMouths.length >= caveZones.length * 2,
+       `${caveMouths.length} mouths for ${caveZones.length} systems`);
+    ok('hollows: the drop zone is on the surface', !inCave(0, 0));
+    let deepRock = 0, openIn = 0;
+    for (const z of caveZones) {
+      /* inside a system there has to be both rock and floor, or it is a hole in
+         the ground rather than a cave */
+      for (let k = 0; k < 400; k++) {
+        const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * z.r * 0.8;
+        const x = z.x + Math.cos(a) * r, y = z.y + Math.sin(a) * r;
+        if (solidAt(x, y)) deepRock++; else openIn++;
+      }
+    }
+    ok('hollows: the systems are mostly rock', deepRock > openIn,
+       `${deepRock} rock / ${openIn} floor`);
+    ok('hollows: ...but with floor to walk on', openIn > deepRock * 0.12,
+       `${deepRock} rock / ${openIn} floor`);
+    ok('hollows: you are underground inside one', inCave(caveZones[0].x, caveZones[0].y));
+    ok('hollows: and on the surface between them', !inCave(0, 0) && caveDepth(0, 0) === 0);
+    ok('hollows: a mouth is walkable', caveMouths.some(m => !solidAt(m.x, m.y)));
   }
-  if (M.city && !M.cave) ok(`${id}: has buildings`, buildings.length > 20, String(buildings.length));
+  if (M.city && !M.caves) ok(`${id}: has buildings`, buildings.length > 20, String(buildings.length));
   if (!M.city) ok('plains: nothing solid', frac === 0);
 }
 /* the same seed must build the same world on both machines, or the client is
@@ -123,10 +151,13 @@ for (const id of MAP_IDS) {
   buildMap('megacity', 100);
   const c = G.solid.slice(0, 20000).join('');
   ok('a different seed builds a different city', a !== c);
-  buildMap('cave', 55);
+  buildMap('hollows', 55);
   const d = G.solid.slice(0, 20000).join('');
-  buildMap('cave', 55);
-  ok('caves are reproducible too', d === G.solid.slice(0, 20000).join(''));
+  const zones = caveZones.map(z => Math.round(z.x) + ',' + Math.round(z.y)).join(';');
+  buildMap('hollows', 55);
+  ok('cave systems are reproducible too',
+     d === G.solid.slice(0, 20000).join('') &&
+     zones === caveZones.map(z => Math.round(z.x) + ',' + Math.round(z.y)).join(';'));
 }
 
 /* ============================ 2. TROOP DATA ============================ */
@@ -351,62 +382,92 @@ for (const id of OBJ_IDS) {
 }
 
 /* ============================ 10. JAMMING ============================ */
-section('10. Underground, and under a jammer');
+section('10. Underground is a place, not a map');
 {
-  newMission('cave');
+  newMission('hollows');
   const P = S.players[0];
-  ok('cave: the squad is standing, not in pods', !P.inPod);
-  ok('cave: the squad is on open floor', !solidAt(P.x, P.y));
   const orb = STRAT_BY_ID.orbprecision;
-  P.armed = orb;
-  P.stt.fill(0);
-  const ballsBefore = S.balls.length;
+  const eagle = STRAT_BY_ID.eagle500;
+
+  /* on the surface everything works normally */
+  P.x = 0; P.y = 0;
+  ok('surface: the squad starts above ground', !inCave(P.x, P.y));
+  ok('surface: an orbital is fine', !jammedAt(P.x, P.y, orb));
+  P.armed = orb; P.stt.fill(0);
+  const b0 = S.balls.length;
   throwStratagem(P, P.x + 200, P.y);
-  ok('cave: an orbital call is refused', S.balls.length === ballsBefore);
-  const rein = STRAT_BY_ID.reinforce;
-  ok('cave: reinforcement is still allowed', !jammedCheck(rein));
-  ok('cave: an Eagle cannot fly through rock either',
-     !!jammedCheck(STRAT_BY_ID.eagle500));
-  /* breaking a jammer down here buys a window rather than nothing */
+  ok('surface: the beacon leaves your hand', S.balls.length > b0);
+
+  /* walk into a cave and it stops */
+  const z = caveZones[0];
+  const spot = openSpot(z.x, z.y);
+  P.x = spot.x; P.y = spot.y;
+  ok('cave: standing inside one counts as underground', inCave(P.x, P.y));
+  ok('cave: an orbital is refused', !!jammedAt(P.x, P.y, orb));
+  ok('cave: an Eagle cannot fly through a hillside either', !!jammedAt(P.x, P.y, eagle));
+  ok('cave: reinforcement is still allowed', !jammedAt(P.x, P.y, STRAT_BY_ID.reinforce));
+  P.armed = orb; P.stt.fill(0);
+  const b1 = S.balls.length;
+  throwStratagem(P, P.x + 100, P.y);
+  ok('cave: the beacon is kept, not spent', S.balls.length === b1);
+  ok('cave: it is dark in here', caveDepth(P.x, P.y) > 0.2, String(caveDepth(P.x, P.y)));
+  ok('cave: and not out there', caveDepth(0, 0) === 0);
+
+  /* breaking a jammer buys a window, wherever you are standing */
   S.objectives.length = 0;
   S.objectives.push({ nid: 7, id: 'jammer', D: OBJECTIVES.jammer, kind: 'destroy',
     name: 'J', x: P.x + 300, y: P.y, hp: 0, max: 2400, field: 1300, radius: 26,
     col: '#f00', t: 0, prog: 0, have: 0, need: 0, armor: 2, done: false, timeout: 999 });
   run(0.5);
   ok('cave: a dead jammer opens the uplink', S.mod.uplink > 60, String(S.mod.uplink));
-  ok('cave: and the call goes through', !jammedCheck(orb));
+  ok('cave: and the call goes through', !jammedAt(P.x, P.y, orb));
   P.armed = orb; P.stt.fill(0);
-  const bc = S.balls.length;
-  throwStratagem(P, P.x + 200, P.y);
-  ok('cave: the beacon actually leaves your hand', S.balls.length > bc);
+  const b2 = S.balls.length;
+  throwStratagem(P, P.x + 100, P.y);
+  ok('cave: the beacon actually leaves your hand now', S.balls.length > b2);
   S.mod.uplink = 0;
-  ok('cave: and the rock comes back when it expires', !!jammedCheck(orb));
+  ok('cave: and the rock comes back when it expires', !!jammedAt(P.x, P.y, orb));
 
-  /* a jammer above ground blocks everything in its field */
+  /* a Helldiver called into a cave walks in rather than dropping */
+  newMission('hollows');
+  const Q = S.players[0];
+  const deep = openSpot(caveZones[0].x, caveZones[0].y);
+  S.livesLeft = 3;
+  die(Q);
+  const podsBefore = S.pods.length;
+  reinforceAt(deep.x, deep.y, Q);
+  ok('cave: no pod is dropped into a hillside', S.pods.length === podsBefore,
+     `${podsBefore} -> ${S.pods.length}`);
+  ok('cave: they are on their feet at a mouth', !Q.down && !Q.inPod);
+  ok('cave: ...standing on floor, not inside rock', !solidAt(Q.x, Q.y));
+  ok('cave: that cost a reinforcement', S.livesLeft === 2, String(S.livesLeft));
+
+  /* on the surface it is still a pod */
+  newMission('hollows');
+  const Z = S.players[0];
+  S.livesLeft = 3;
+  die(Z);
+  const pb = S.pods.length;
+  reinforceAt(0, 0, Z);
+  ok('surface: reinforcement still comes down on a pod', S.pods.length === pb + 1);
+
+  /* a jammer above ground still blocks its own field */
   newMission('plains');
   const P2 = S.players[0];
   S.objectives.push({ nid: 1, id: 'jammer', D: OBJECTIVES.jammer, kind: 'destroy',
     name: 'J', x: P2.x + 100, y: P2.y, hp: 100, max: 100, field: 1300, radius: 26,
     col: '#f00', t: 0, prog: 0, have: 0, need: 0, armor: 2, done: false, timeout: 999 });
-  P2.armed = STRAT_BY_ID.gatling;
-  P2.stt.fill(0);
-  const b2 = S.balls.length;
+  P2.armed = STRAT_BY_ID.gatling; P2.stt.fill(0);
+  const b3 = S.balls.length;
   throwStratagem(P2, P2.x + 200, P2.y);
-  ok('a jammer refuses the call', S.balls.length === b2);
+  ok('a jammer refuses the call', S.balls.length === b3);
   S.objectives[0].hp = 0;
   run(0.5);
-  P2.armed = STRAT_BY_ID.gatling;
-  P2.stt.fill(0);
+  P2.armed = STRAT_BY_ID.gatling; P2.stt.fill(0);
   throwStratagem(P2, P2.x + 200, P2.y);
-  ok('destroying it restores the uplink', S.balls.length > b2);
-}
-import { jammedAt } from '../src/strat.js';
-function jammedCheck(s) {
-  const P = S.players[0];
-  return jammedAt(P.x, P.y, s);
+  ok('destroying it restores the uplink', S.balls.length > b3);
 }
 
-/* ============================ 11. THE SQUAD ============================ */
 section('11. Four Helldivers, reinforcement and the wipe');
 {
   newMission('megacity', {
@@ -450,7 +511,10 @@ section('11. Four Helldivers, reinforcement and the wipe');
   run(1);
   ok('solo does not start the emergency clock', S.wipeT === 0, String(S.wipeT));
   const lives = S.livesLeft;
-  run(12);
+  /* keep the horde off them: this is testing the redeploy, not the fight, and a
+     Helldiver who lands and is immediately killed again reads the same as one
+     who never came back */
+  run(12, () => { S.enemies.length = 0; });
   ok('solo redeployed by itself', !P.down && !P.inPod,
      `down=${P.down} inPod=${P.inPod} waiting=${P.waiting.toFixed(1)} pods=${S.pods.length}`);
   ok('it cost exactly one reinforcement', S.livesLeft === lives - 1,
@@ -583,6 +647,18 @@ section('16. Snapshot size');
   line(`  ${e.length / 8} bodies in view -> ${bytes} bytes/snapshot ` +
        `-> ${(bytes * 12 / 1024).toFixed(0)} KB/s at 12Hz`);
   ok('a busy snapshot stays under 40KB', bytes < 40000, String(bytes));
+}
+
+/* ---- switching maps must not leave the last one's caves behind ---- */
+{
+  buildMap('hollows', 3);
+  const hadZones = caveZones.length;
+  buildMap('plains', 3);
+  ok('a map with no caves has no caves', caveZones.length === 0,
+     `${hadZones} -> ${caveZones.length}`);
+  ok('...so open ground is not secretly underground', !inCave(2500, 2500));
+  buildMap('megacity', 3);
+  ok('nor does the city', caveZones.length === 0);
 }
 
 /* ============================ 17. PICKUPS ============================ */

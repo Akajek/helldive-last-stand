@@ -10,7 +10,7 @@ import { SFX, sndAt, A } from './audio.js';
 import { capeBlast } from './events.js';
 import { post, postArr } from './outbox.js';
 import { armorScale, RICOCHET, FACTIONS, PROJ } from './data.js';
-import { damageArea, collapseNear, damageCellAt, solidAt } from './world.js';
+import { damageArea, collapseNear, damageCellAt, solidAt, inCave } from './world.js';
 
 /* who gets told when a Helldiver goes down, so the GM can be paid for it */
 export const HOOKS = { onDiverDown: null, onKill: null, onMissionEnd: null };
@@ -294,7 +294,7 @@ export function updateBullets(dt) {
         for (let sp = 0; sp < n; sp++) {
           const a = Math.atan2(-b.vy, -b.vx) + rand(-1, 1);
           spark(b.x, b.y, Math.cos(a) * rand(40, 200), Math.sin(a) * rand(40, 200),
-                rand(0.1, 0.3), S.map.cave ? '#a8926e' : '#cfd6ff', 2);
+                rand(0.1, 0.3), inCave(b.x, b.y) ? '#a8926e' : '#cfd6ff', 2);
         }
       }
     }

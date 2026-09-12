@@ -11,6 +11,7 @@
 import { clamp, rand, TAU, mulberry, shuffle } from './util.js';
 import { S, eachDiver, spark } from './state.js';
 import { MAPS } from './data.js';
+import { dig, inCave, clearCaves } from './caves.js';
 
 export const CELL = 30;
 export const CELLHP = 85;
@@ -28,7 +29,6 @@ export const G = {
 };
 export let buildings = [];
 export let rubble = [];
-export let caveMouths = [];       /* open ground a reinforcement can walk in from */
 export let mapSeed = 1;
 
 export function gw() { return G.w; }
@@ -65,12 +65,13 @@ export function buildMap(id, seed) {
   S.map = MAPS[id] || MAPS.plains;
   S.world = S.map.world;
   mapSeed = seed === undefined ? (1 + ((Math.random() * 0x7ffffffe) | 0)) : (seed >>> 0);
-  buildings = []; rubble = []; caveMouths = [];
+  buildings = []; rubble = [];
   S.rebuildQ = null;
   S.nextRebuild = REBUILD_EVERY;
   allocGrid(S.world);
   const R = mulberry(mapSeed);
-  if (S.map.cave) buildCave(R);
+  clearCaves();
+  if (S.map.caves) buildCaverns(R);
   else if (S.map.city) buildMegacity(R);
   return mapSeed;
 }
@@ -146,89 +147,24 @@ function indexBuilding(i) {
 }
 export function clearBGrid() { for (const k in bgrid) delete bgrid[k]; }
 
-/* ============================ THE HIVE ============================
-   Solid rock, then tunnels chewed out of it: a ring of chambers joined by
-   corridors, with a wide cavern in the middle where the pods come down. Rock is
-   far tougher than masonry and never collapses -- there is nothing above it to
-   fall. */
-function buildCave(R) {
-  clearBGrid();
-  const n = Math.ceil(S.world / CELL);
-  /* fill the world with rock */
-  for (let cy = -n; cy <= n; cy++) {
-    for (let cx = -n; cx <= n; cx++) {
-      const i = gIndex(cx, cy);
-      if (i < 0) continue;
-      G.solid[i] = 1; G.hp[i] = ROCKHP; G.max[i] = ROCKHP;
-      G.bid[i] = -1; G.win[i] = (R() < 0.07) ? 1 : 0;   /* the odd glowing seam */
-    }
-  }
-  const carve = (cx, cy, r) => {
-    const ri = Math.ceil(r);
-    for (let dy = -ri; dy <= ri; dy++) {
-      for (let dx = -ri; dx <= ri; dx++) {
-        if (dx * dx + dy * dy > r * r) continue;
-        const i = gIndex(cx + dx, cy + dy);
-        if (i < 0) continue;
-        G.solid[i] = 0; G.hp[i] = 0;
-      }
-    }
-  };
-  const tunnel = (x0, y0, x1, y1, rad) => {
-    const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0)) + 1;
-    let wob = R() * TAU;
-    for (let s = 0; s <= steps; s++) {
-      const t = s / steps;
-      wob += (R() - 0.5) * 0.5;
-      const jx = Math.cos(wob) * 1.6, jy = Math.sin(wob) * 1.6;
-      carve(Math.round(x0 + (x1 - x0) * t + jx), Math.round(y0 + (y1 - y0) * t + jy),
-            rad + (R() < 0.25 ? 1 : 0));
-    }
-  };
+/* ============================ CAVES ============================
+   The digging itself lives in caves.js; this is the seam between it and the
+   grid. A cave is a region now, not a map -- see that file for why. */
+export { caveZones, caveMouths, caveDepth, inCave, nearestMouth, mouthIndex } from './caves.js';
 
-  /* the landing cavern */
-  carve(0, 0, 14);
-  const rooms = [{ x: 0, y: 0, r: 14 }];
-  const RING = [0.42, 0.72, 0.95];
-  for (let ring = 0; ring < RING.length; ring++) {
-    const count = 5 + ring * 3;
-    const base = R() * TAU;
-    for (let k = 0; k < count; k++) {
-      const a = base + (k / count) * TAU + (R() - 0.5) * 0.35;
-      const d = n * RING[ring] * (0.82 + R() * 0.3);
-      const cx = Math.round(Math.cos(a) * d), cy = Math.round(Math.sin(a) * d);
-      if (Math.abs(cx) > n - 6 || Math.abs(cy) > n - 6) continue;
-      const r = 5 + R() * 7;
-      carve(cx, cy, r);
-      rooms.push({ x: cx, y: cy, r });
-    }
-  }
-  /* join every chamber to the one before it, then throw in some shortcuts so it
-     is a network rather than a wheel */
-  for (let i = 1; i < rooms.length; i++) {
-    const a = rooms[i], b = rooms[(R() * i) | 0];
-    tunnel(a.x, a.y, b.x, b.y, 2 + ((R() * 2) | 0));
-  }
-  for (let k = 0; k < rooms.length; k++) {
-    if (R() > 0.45) continue;
-    const a = rooms[(R() * rooms.length) | 0], b = rooms[(R() * rooms.length) | 0];
-    if (a !== b) tunnel(a.x, a.y, b.x, b.y, 2);
-  }
-  /* the outer chambers are where reinforcements come in on foot */
-  caveMouths = rooms.slice(1).filter(r => Math.hypot(r.x, r.y) > n * 0.5)
-    .map(r => ({ x: r.x * CELL + CELL / 2, y: r.y * CELL + CELL / 2 }));
-  if (!caveMouths.length) caveMouths.push({ x: 0, y: 0 });
-  S.caveRooms = rooms.map(r => ({ x: r.x * CELL, y: r.y * CELL, r: r.r * CELL }));
+function buildCaverns(R) {
+  clearBGrid();
+  dig(G, gIndex, CELL, R, S.map.rockHp || ROCKHP);
 }
-/* Somewhere in the cave with actual floor under it, as close to the hint as the
-   rock allows. It used to pick a chamber at random and ignore the hint entirely,
-   which dropped the squad four thousand units from the entry cavern and left the
-   camera inside a wall on the way there. */
+
+/* Somewhere with actual floor under it, as close to the hint as the rock allows.
+   Walks outwards from the hint first, and only goes chamber-hunting if that
+   fails -- picking a chamber at random and ignoring the hint is how the squad
+   once ended up four thousand units from where it was supposed to be. */
 export function openSpot(nearX, nearY, tries) {
   const hx = nearX || 0, hy = nearY || 0;
   if (!solidAt(hx, hy)) return { x: hx, y: hy };
-  /* walk outwards from the hint before giving up and going room-hunting */
-  for (let ring = 1; ring <= 12; ring++) {
+  for (let ring = 1; ring <= 14; ring++) {
     const r = ring * CELL * 1.5, n = 6 + ring * 3;
     const off = Math.random() * TAU;
     for (let i = 0; i < n; i++) {
@@ -241,7 +177,6 @@ export function openSpot(nearX, nearY, tries) {
     .sort((a, b) => Math.hypot(a.x - hx, a.y - hy) - Math.hypot(b.x - hx, b.y - hy));
   for (let i = 0; i < (tries || 40); i++) {
     if (!rooms.length) break;
-    /* prefer the nearest handful rather than the whole hive */
     const r = rooms[Math.min(rooms.length - 1, (Math.random() * Math.min(5, rooms.length)) | 0)];
     const a = rand(0, TAU), d = Math.random() * r.r * 0.75;
     const x = r.x + Math.cos(a) * d, y = r.y + Math.sin(a) * d;
@@ -261,6 +196,7 @@ export function killCell(cx, cy, vx, vy, dusty) {
   if (netCK.length < 600) { netCK.push(cx, cy); }
   const bid = G.bid[i];
   const b = bid >= 0 ? buildings[bid] : null;
+  const rock = bid < 0;
   if (b) b.alive--;
   const x = cx * CELL, y = cy * CELL;
   if (rubble.length < 900)
@@ -271,7 +207,7 @@ export function killCell(cx, cy, vx, vy, dusty) {
     const a = rand(0, TAU), sp = rand(40, 240);
     spark(x + CELL / 2, y + CELL / 2, Math.cos(a) * sp + (vx || 0) * 0.2,
           Math.sin(a) * sp + (vy || 0) * 0.2, rand(0.25, 0.8),
-          k % 2 ? (S.map.cave ? '#7a6a52' : '#8b8fa0') : (S.map.cave ? '#4a3f30' : '#5a606e'),
+          k % 2 ? (rock ? '#7a6a52' : '#8b8fa0') : (rock ? '#4a3f30' : '#5a606e'),
           rand(2, 6));
   }
   if (b && !b.collapse && !b.dead && b.alive > 0 && b.alive / b.total < 0.38)
@@ -327,7 +263,7 @@ export let onCollapseStart = null, onCollapseDone = null;
 export function setCollapseHooks(a, b) { onCollapseStart = a; onCollapseDone = b; }
 
 export function startCollapse(b) {
-  if (b.collapse || b.dead || S.map.cave) return;
+  if (b.collapse || b.dead) return;   /* rock has no building, so it never gets here */
   b.collapse = 0.9;
   if (onCollapseStart) onCollapseStart(b);
 }
@@ -479,7 +415,7 @@ export function freeSpot(x, y, r) {
   const o = { x, y };
   for (let i = 0; i < 5; i++) if (!resolveCircle(o, r)) break;
   /* in a cave a pushed-out point can still be buried; walk it to real floor */
-  if (S.map.cave && solidAt(o.x, o.y)) return openSpot(x, y);
+  if (solidAt(o.x, o.y)) return openSpot(x, y);
   return o;
 }
 /* a point a certain distance from the divers with floor under it */
@@ -490,7 +426,7 @@ export function spawnPoint(anchorX, anchorY, minD, maxD) {
     const y = clamp(anchorY + Math.sin(a) * d, -S.world + 60, S.world - 60);
     if (!solidAt(x, y)) return { x, y };
   }
-  if (S.map.cave) return openSpot(anchorX, anchorY);
+  return openSpot(anchorX, anchorY);
   return { x: clamp(anchorX, -S.world + 60, S.world - 60),
            y: clamp(anchorY, -S.world + 60, S.world - 60) };
 }

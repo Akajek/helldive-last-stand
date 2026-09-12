@@ -107,19 +107,26 @@ The **INFIGHTING** slider controls how readily this happens; at 0 they have a tr
 - **MEGACITY** — the same size, fully destructible down to 30-unit cells. Buildings that
   lose enough of themselves collapse, and anything inside goes with them. Super Earth
   rebuilds the block every 75 seconds.
-- **THE HIVE** — underground, tighter, and dark. You only see what your torch sees.
+- **THE HOLLOWS** — open ground with six cave systems dug into it, plus boulders for
+  cover. You fight on the surface and duck underground when the map sends you there.
 
-### The Hive is different
+### Underground is a place, not a map
 
-There is no sky, so **nothing can be called down** — not a pod, not an orbital shell,
-not an Eagle, which would have to fly through several hundred metres of rock. You start
-with what you carry.
+A cave system is a region: a body of rock with chambers and corridors chewed out of the
+inside and two or three mouths opening onto the surface. Walk into one and things change;
+walk back out and they change back.
+
+Inside a cave there is no sky, so **nothing can be called down** — not a pod, not an
+orbital shell, not an Eagle, which would have to fly through a hillside. The light dims
+as you approach a mouth rather than switching off, and underground you only see what your
+torch sees.
 
 Breaking a **JAMMER** punches a hole in the interference and opens a 120-second uplink
 window. Everything you have been saving, all at once, and then the rock comes back. The
-HUD tells you which state you are in.
+top bar tells you which state you are in.
 
-Reinforcements still work: they walk in from the nearest cave mouth instead of dropping.
+Reinforcements still work underground: a pod cannot reach you through a hillside, so the
+Helldiver walks in from the nearest mouth instead. On the surface it is still a pod.
 
 ## Waves
 
@@ -205,10 +212,14 @@ Things that were specifically fixed, since they were the reported problems:
   a realistic busy fight is about 34.
 - **Rounds are sent once when fired** instead of having their position retransmitted
   twelve times a second for their whole short life.
-- **A hidden tab no longer freezes the mission.** Browsers stop calling
-  `requestAnimationFrame` in a background tab, so a host who alt-tabbed froze the game
-  for the whole squad. The simulation now runs off a Worker clock when the tab is not
-  visible; only the drawing stops.
+- **Alt-tabbing no longer degrades the mission for everyone else.** Browsers stop
+  calling `requestAnimationFrame` for a background page and throttle its timers to once
+  a second, so a host who alt-tabbed first froze the game for the whole squad and then —
+  after the first fix — ran it at five per cent speed. Time is now *consumed* rather
+  than clamped, and three separate clocks feed it: rAF while the window is painted, a
+  Worker timer when it is not, and arriving network messages, which browsers deliver on
+  time regardless. Measured by blocking the main thread outright: 483ms stalled, 0.483s
+  simulated.
 - **Detail scales automatically** to hold the frame rate, and can be pinned to HIGH or
   LOW in the pause menu.
 

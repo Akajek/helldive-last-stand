@@ -10,7 +10,7 @@ import {
   musicToggle, musicApplyVolume, useExternalTrack, probeExternalTrack, musicSchedule
 } from './audio.js';
 import { STRATS, STRAT_BY_ID, FACTIONS, TROOPS } from './data.js';
-import { buildMap, setCollapseHooks } from './world.js';
+import { buildMap, setCollapseHooks, caveZones, caveDepth } from './world.js';
 import { worldEv } from './events.js';
 import { bindFlash, hurt } from './combat.js';
 import { spawnEnemy } from './enemies.js';
@@ -715,7 +715,11 @@ const HD = {
   S, CFG, GM, NET, LOBBY, LOADOUT, start, version: 2, lastError: null,
   spawn: (id, x, y) => spawnEnemy(id, { x: x === undefined ? S.cam.x + 300 : x,
                                         y: y === undefined ? S.cam.y : y }),
-  troops: () => Object.keys(TROOPS)
+  troops: () => Object.keys(TROOPS),
+  caves: () => caveZones,
+  depth: (x, y) => caveDepth(x === undefined ? S.me.x : x, y === undefined ? S.me.y : y),
+  /* drop yourself somewhere, for looking at the map rather than walking it */
+  goto: (x, y) => { if (S.me) { S.me.x = x; S.me.y = y; S.cam.x = x; S.cam.y = y; } }
 };
 window.HD = HD;
 

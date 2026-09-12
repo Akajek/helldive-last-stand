@@ -2,8 +2,8 @@
 'use strict';
 import { rand, clamp, TAU } from './util.js';
 import { UI } from './config.js';
-import { S, livingDiver } from './state.js';
-import { G, CELL, gIndex, buildings, rubble } from './world.js';
+import { S, livingDiver, earX, earY } from './state.js';
+import { G, CELL, gIndex, buildings, rubble, caveDepth } from './world.js';
 import { FACTIONS, SENTRIES, WEAPONS, OBJECTIVES } from './data.js';
 import { sporeLevel } from './objectives.js';
 import { W_ } from './diver.js';
@@ -86,9 +86,9 @@ function drawCells() {
       g.push(cx, cy, i);
     }
   }
-  const cave = S.map.cave;
   for (const [bid, list] of groups) {
     const b = bid >= 0 ? buildings[bid] : null;
+    const cave = bid < 0;            /* living rock, not masonry */
     /* rock, lit only by whatever torch is pointing at it, has to sit clearly
        above the cave floor or the whole map reads as one black rectangle */
     const roof = b ? b.roof : '#584534';
@@ -861,7 +861,10 @@ export function draw() {
   drawWreck();
   drawReticles();
 
-  if (S.map.dark) drawDarkness(sx, sy);
+  /* Darkness is a property of where you are standing, not of the map: it comes
+     up as you walk into a cave mouth and drops away as you come back out. */
+  const dark = caveDepth(earX(), earY());
+  if (dark > 0.01) drawDarkness(sx, sy, dark);
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   drawOverlays();
@@ -955,14 +958,14 @@ function drawReticles() {
 export const GMDRAW = { fn: null };
 
 /* ---- underground it is dark, and you carry the only light ---- */
-function drawDarkness(sx, sy) {
+function drawDarkness(sx, sy, depth) {
   if (lightCv.width !== S.W || lightCv.height !== S.H) {
     lightCv.width = S.W; lightCv.height = S.H;
   }
   const L = lctx;
   L.setTransform(1, 0, 0, 1, 0, 0);
   L.globalCompositeOperation = 'source-over';
-  L.fillStyle = 'rgba(4,4,6,0.90)';
+  L.fillStyle = 'rgba(3,3,5,' + (0.94 * depth).toFixed(3) + ')';
   L.fillRect(0, 0, S.W, S.H);
   L.globalCompositeOperation = 'destination-out';
   const ox = S.W / 2 - S.cam.x + sx + S.camKick.x;
@@ -981,13 +984,16 @@ function drawDarkness(sx, sy) {
   const budget = Math.round(26 * S.quality) + 8;
   for (const P of S.players) {
     if (P.inPod || P.dead) continue;
-    hole(P.x, P.y, P === S.me ? 540 : 380);
+    /* Keep the pool well inside the view. At 540 it reached the corners of a
+       1024-wide screen and the cave stopped reading as dark at all. */
+    hole(P.x, P.y, P === S.me ? 330 : 250);
     /* the torch points where you are looking */
     const a = P.ang;
+    /* the torch reaches further than the pool, but only where you are looking */
     const steps = S.quality > 0.6 ? 5 : 3;
     for (let i = 1; i <= steps; i++)
-      hole(P.x + Math.cos(a) * i * (450 / steps), P.y + Math.sin(a) * i * (450 / steps),
-           190 - i * (80 / steps), 0.2);
+      hole(P.x + Math.cos(a) * i * (500 / steps), P.y + Math.sin(a) * i * (500 / steps),
+           200 - i * (120 / steps), 0.15);
   }
   const lit = [];
   for (const b of S.blasts) if (!b.marker) lit.push([b.x, b.y, b.r * 2.2, 0.1]);

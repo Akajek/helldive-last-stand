@@ -7,7 +7,7 @@ import { SFX, MUS } from './audio.js';
 import { worldEv, capeInit } from './events.js';
 import { clearOut } from './outbox.js';
 import {
-  updateCollapses, updateRebuild, startRebuild, REBUILD_EVERY, netCK, netCA, openSpot
+  updateCollapses, updateRebuild, startRebuild, REBUILD_EVERY, netCK, netCA
 } from './world.js';
 import { makeDiver, updateDiver } from './diver.js';
 import {
@@ -65,21 +65,10 @@ export function reset() {
   /* every dive starts the only way it can: strapped into a hellpod -- and a squad
      spreads out so four pods do not land in the same crater. Underground there is
      nothing to drop through, so the squad simply walks out of the entry chamber. */
-  if (S.map.cave) {
-    const ring = S.players.length > 1 ? 70 : 0;
-    for (let i = 0; i < S.players.length; i++) {
-      const a = (i / S.players.length) * TAU;
-      const P = S.players[i];
-      const spot = openSpot(Math.cos(a) * ring, Math.sin(a) * ring);
-      P.x = spot.x; P.y = spot.y; P.inPod = false; P.guard = 3;
-      capeInit(P);
-    }
-  } else {
-    const ring = S.players.length > 1 ? 95 : 0;
-    for (let i = 0; i < S.players.length; i++) {
-      const a = (i / S.players.length) * TAU;
-      dropPod(Math.cos(a) * ring, Math.sin(a) * ring, { kind: 'player', pid: S.players[i].id });
-    }
+  const ring = S.players.length > 1 ? 95 : 0;
+  for (let i = 0; i < S.players.length; i++) {
+    const a = (i / S.players.length) * TAU;
+    dropPod(Math.cos(a) * ring, Math.sin(a) * ring, { kind: 'player', pid: S.players[i].id });
   }
   /* the camera is placed AFTER the squad is, or it spends the first two seconds
      easing across the map from wherever the roster happened to be built */
@@ -182,7 +171,7 @@ export function update(dt) {
   updateStatus(dt);
   updateWreck(dt);
 
-  if (S.map.city && !S.map.cave) {
+  if (S.map.city && !S.map.caves) {
     if (S.time >= S.nextRebuild) {
       S.nextRebuild += REBUILD_EVERY;
       if (startRebuild()) worldEv('rebuild', 0, 0);
