@@ -3726,6 +3726,9 @@ function clientEnemy(id,type){
   return e;
 }
 function clientSnap(m){
+  /* a snapshot arrives between frames and carries a burst of world events, so it
+     gets its own allowance rather than whatever this frame has left */
+  sfxBudget=Math.max(sfxBudget,20);
   var now2=performance.now();
   NET.snapGap=Math.max(0.03,Math.min(0.4,(now2-NET.lastSnap)/1000));
   NET.lastSnap=now2;
@@ -3962,6 +3965,10 @@ function clientOver(m){
 /* client-side frame: no simulation, just smoothing, effects and input */
 function updateClient(dt){
   time+=dt;
+  /* The budget is what stops one busy moment spawning a hundred oscillators, and
+     it was only ever refilled in update() -- which a client never runs. Every
+     sound effect on a joining Helldiver was being dropped at the gate. */
+  sfxBudget=14;
   /* a spectator joined with no Helldiver of their own: they ride the squad, and
      `player` stays a valid object so the HUD and camera keep working */
   if(!me&&players.length) player=players[0];
