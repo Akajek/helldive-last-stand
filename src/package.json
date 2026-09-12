@@ -1,0 +1,4 @@
+{
+  "//": "Node needs to be told that src/ is ES modules. The repository root stays CommonJS so server.js can keep using require(). Browsers ignore this file entirely -- it exists so the simulation can be run headless by test/run.mjs.",
+  "type": "module"
+}
