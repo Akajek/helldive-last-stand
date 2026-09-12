@@ -975,19 +975,32 @@ function drawDarkness(sx, sy) {
     L.fillStyle = g;
     L.beginPath(); L.arc(x + ox, y + oy, r, 0, TAU); L.fill();
   };
+  /* Each hole is a gradient object, and gradients are not free. Budget them:
+     the squad's torches always get theirs, and the decoration takes what is
+     left, nearest first. */
+  const budget = Math.round(26 * S.quality) + 8;
   for (const P of S.players) {
     if (P.inPod || P.dead) continue;
     hole(P.x, P.y, P === S.me ? 540 : 380);
     /* the torch points where you are looking */
     const a = P.ang;
-    for (let i = 1; i <= 5; i++)
-      hole(P.x + Math.cos(a) * i * 90, P.y + Math.sin(a) * i * 90, 190 - i * 16, 0.2);
+    const steps = S.quality > 0.6 ? 5 : 3;
+    for (let i = 1; i <= steps; i++)
+      hole(P.x + Math.cos(a) * i * (450 / steps), P.y + Math.sin(a) * i * (450 / steps),
+           190 - i * (80 / steps), 0.2);
   }
-  for (const b of S.blasts) if (!b.marker) hole(b.x, b.y, b.r * 2.2, 0.1);
-  for (const s of S.sentries) hole(s.x, s.y, 200, 0.3);
-  for (const o of S.objectives) hole(o.x, o.y, 260, 0.3);
-  for (const p of S.pods) hole(p.x, p.y, 300, 0.2);
-  if (S.wreck) hole(S.wreck.x, S.wreck.y, 900, 0.2);
+  const lit = [];
+  for (const b of S.blasts) if (!b.marker) lit.push([b.x, b.y, b.r * 2.2, 0.1]);
+  for (const s of S.sentries) lit.push([s.x, s.y, 200, 0.3]);
+  for (const o of S.objectives) lit.push([o.x, o.y, 260, 0.3]);
+  for (const p of S.pods) lit.push([p.x, p.y, 300, 0.2]);
+  if (S.wreck) lit.push([S.wreck.x, S.wreck.y, 900, 0.2]);
+  if (lit.length > budget) {
+    lit.sort((a, b) => Math.hypot(a[0] - S.cam.x, a[1] - S.cam.y)
+                     - Math.hypot(b[0] - S.cam.x, b[1] - S.cam.y));
+    lit.length = budget;
+  }
+  for (const L of lit) hole(L[0], L[1], L[2], L[3]);
   L.globalCompositeOperation = 'source-over';
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(lightCv, 0, 0);
