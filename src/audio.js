@@ -336,10 +336,12 @@ export function useExternalTrack(url, name) {
   if (MUS.timer) { clearInterval(MUS.timer); MUS.timer = null; }
   if (MUS.running && MUS.on) a.play().catch(() => {});
 }
-/* if an ost.mp3 is sitting next to the page, it becomes the soundtrack */
+/* If an ost.mp3 is sitting next to the page it becomes the soundtrack. Asked
+   with a HEAD request rather than by pointing an <audio> element at it, because
+   a missing file that way logs a red 404 in everyone's console forever. */
 export function probeExternalTrack() {
-  const probe = new Audio('ost.mp3');
-  probe.addEventListener('canplaythrough',
-    () => useExternalTrack('ost.mp3', 'ost.mp3'), { once: true });
-  probe.load();
+  if (!window.fetch) return;
+  fetch('ost.mp3', { method: 'HEAD' })
+    .then(r => { if (r.ok) useExternalTrack('ost.mp3', 'ost.mp3'); })
+    .catch(() => {});
 }

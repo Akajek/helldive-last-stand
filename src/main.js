@@ -36,7 +36,7 @@ import {
 } from './net.js';
 import { netSnapshot, netSendCity, netSendOver, hostInput } from './host.js';
 import { clientCity, clientSnap, updateClient, clientCode, clearMaps, CITYHOOK, GMSHADOW } from './client.js';
-import { GM, gmReset, gmUpdate, gmKey, gmDraw, gmHud, gmCycleFaction, GM_MIN_RANGE } from './gm.js';
+import { GM, gmReset, gmUpdate, gmKey, gmDraw, gmHud, gmTrySpawn, GM_MIN_RANGE } from './gm.js';
 
 /* ============================ CANVAS ============================ */
 const cv = el('c');
@@ -152,7 +152,10 @@ function applyVol() {
 function onClick() {
   audioInit();
   if (LOADUI.open) return;
-  if (amGM()) return;                 /* the GM's click is handled in gmUpdate */
+  /* Holding the button is handled in gmUpdate, but a single quick click has
+     its mousedown and mouseup both land between two frames -- so the frame only
+     ever sees the button already released, and nothing is ever deployed. */
+  if (amGM()) { gmTrySpawn(mouse); return; }
   if (!S.running || !S.me) return;
   const me = S.me;
   if (isClient()) {
@@ -514,14 +517,15 @@ function syncNames() {
 
 /* ============================ THE LOOP ============================ */
 let last = 0, fpsAcc = 0, fpsN = 0, errShown = false;
-function frame(t) {
-  const dt = Math.min(0.033, (t - last) / 1000 || 0);
-  last = t;
+
+/* One step of everything. `paint` is false when the tab is not being looked at:
+   the world still has to move -- the host owes the rest of the squad a
+   simulation -- but there is no point drawing it. */
+function step(dt, paint) {
   /* The sound budget is refilled HERE, once, for every role. It used to live
      inside update(), which a joining Helldiver never runs -- so they had no
      sound effects at all and nothing said so. */
-  refillBudget(16);
-
+  refillBudget(paint ? 16 : 6);
   try {
     if (S.running) {
       if (isClient()) updateClient(dt);
@@ -535,12 +539,20 @@ function frame(t) {
         }
       }
     }
-    healthEase(dt);
-    draw(); hud(); gmHud(); drawMinimap();
+    if (paint) {
+      healthEase(dt);
+      draw(); hud(); gmHud(); drawMinimap();
+    }
   } catch (err) {
     if (!errShown) { console.error(err); errShown = true; }
+    HD.lastError = err;
   }
+}
 
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000 || 0);
+  last = t;
+  step(dt, true);
   /* ---- keep up, or draw less ---- */
   fpsAcc += dt; fpsN++;
   if (fpsAcc >= 0.75) {
@@ -555,6 +567,32 @@ function frame(t) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+/* ---- a clock that does not stop when you look away --------------------
+   Browsers stop calling requestAnimationFrame in a hidden tab and throttle
+   setInterval down to once a second. For a solo game that is a courtesy. For a
+   host it means alt-tabbing freezes the mission for everybody else, and for a
+   client it means no input goes upstream until you come back.
+   A worker's timers are not throttled, so the simulation keeps its own clock
+   while the tab is hidden and only the drawing stops. */
+let ticker = null;
+try {
+  const src = 'let t=null;onmessage=function(e){if(e.data){if(!t)t=setInterval(function(){postMessage(0)},16)}else{clearInterval(t);t=null}}';
+  ticker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+  ticker.onmessage = () => {
+    if (!document.hidden) return;          /* rAF has it while we are visible */
+    const t = performance.now();
+    const dt = Math.min(0.05, (t - last) / 1000 || 0);
+    last = t;
+    if (dt > 0.001) step(dt, false);
+  };
+} catch (e) { /* no workers: a hidden tab simply pauses, as it always did */ }
+document.addEventListener('visibilitychange', () => {
+  /* do not charge the simulation for the time nobody was watching */
+  last = performance.now();
+  if (ticker) ticker.postMessage(document.hidden ? 1 : 0);
+});
+if (ticker && document.hidden) ticker.postMessage(1);
 
 /* ============================ BUTTON WIRING ============================ */
 document.querySelectorAll('#maps [data-map]').forEach(b => {
@@ -638,7 +676,8 @@ document.querySelectorAll('[data-q]').forEach(x => {
 
 /* A read-only handle on the world for the browser console. Nothing in the game
    reads it; it is here so a bug can be looked at instead of guessed at. */
-window.HD = { S, CFG, GM, NET, LOBBY, LOADOUT, start, version: 2 };
+const HD = { S, CFG, GM, NET, LOBBY, LOADOUT, start, version: 2, lastError: null };
+window.HD = HD;
 
 /* ---- open on a quiet map so the menu has something behind it ---- */
 cfgApplyUI();
