@@ -66,6 +66,11 @@ export function netOpen(mode, code, mapId) {
     try { m = JSON.parse(ev.data); } catch (e) { return; }
     try { netHandle(m); }
     catch (err) { console.error('net', m && m.t, err); }
+    /* An arriving message is the one heartbeat a browser will not throttle. A
+       host with three Helldivers gets woken sixty times a second by their input
+       even with the window buried, which is what keeps the mission running at
+       real speed for everyone else while somebody alt-tabs. */
+    if (NETWAKE.fn) NETWAKE.fn();
   };
 }
 
@@ -140,6 +145,8 @@ function netHandle(m) {
   }
 }
 export const CFGHOOK = { apply: null };
+/* main.js hangs the loop's catch-up here; see THE LOOP. */
+export const NETWAKE = { fn: null };
 
 export function netQuit() {
   if (NET.ws) { try { NET.ws.close(); } catch (e) {} NET.ws = null; }

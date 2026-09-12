@@ -296,7 +296,7 @@ function musicStep(i, t) {
     if (beat === 0 || beat === 5) mvoice('sawtooth', root * 4 * 1.414, root * 4 * 1.414, t, 0.5, 0.05, 1200);
   } else if (I >= 2 && beat % 2 === 1) mnoise(t, 0.045, 0.05, 6000, 3000, 'highpass');
 }
-function musicSchedule() {
+export function musicSchedule() {
   if (!A.ac || !MUS.on || MUS.ext || !MUS.running) return;
   const spb = 60 / 104 / 2;
   const horizon = now() + 0.25;

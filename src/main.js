@@ -7,7 +7,7 @@ import {
 import { S, amGM, setRole, role, isHost, isClient, say, isSquad } from './state.js';
 import {
   A, SFX, audioInit, applyVolume, setMuted, refillBudget, musicStart, musicStop,
-  musicToggle, musicApplyVolume, useExternalTrack, probeExternalTrack
+  musicToggle, musicApplyVolume, useExternalTrack, probeExternalTrack, musicSchedule
 } from './audio.js';
 import { STRATS, STRAT_BY_ID, FACTIONS, TROOPS } from './data.js';
 import { buildMap, setCollapseHooks } from './world.js';
@@ -28,7 +28,7 @@ import {
 import {
   NET, LOBBY, LOBBYUI, NETHOOK, CFGHOOK, netOpen, netQuit, netSend, netAct, netStatus,
   lobbyBroadcast, lobbySetMode, lobbyWant, lobbyCount, lobbyLocked, lobbyClose,
-  setMyName, sendMyLoadout
+  setMyName, sendMyLoadout, NETWAKE
 } from './net.js';
 import { netSnapshot, netSendCity, netSendOver, hostInput } from './host.js';
 import {
@@ -513,47 +513,45 @@ function syncNames() {
   }
 }
 
-/* ============================ THE LOOP ============================ */
-let last = 0, lastRaf = 0, fpsAcc = 0, fpsN = 0, errShown = false;
+/* ============================ THE LOOP ============================
+   Three things can wake this: requestAnimationFrame while the window is being
+   painted, a worker timer when it is not, and an arriving network message. The
+   last one matters more than it sounds -- a browser will throttle both of the
+   first two down to once a second for a background page, but it delivers socket
+   messages as they arrive. A host with three Helldivers is therefore woken
+   sixty times a second by their input no matter what the window manager thinks.
 
-/* One step of everything. `paint` is false when the tab is not being looked at:
-   the world still has to move -- the host owes the rest of the squad a
-   simulation -- but there is no point drawing it. */
-function step(dt, paint) {
-  /* The sound budget is refilled HERE, once, for every role. It used to live
-     inside update(), which a joining Helldiver never runs -- so they had no
-     sound effects at all and nothing said so. */
-  refillBudget(paint ? 16 : 6);
-  try {
-    if (S.running) {
-      if (isClient()) updateClient(dt);
-      else {
-        if (!S.paused) update(dt);
-        if (isHost()) {
-          NET.acc += dt;
-          /* keep shipping snapshots while paused so the squad is told why the
-             world stopped moving */
-          if (NET.acc >= NET.rate) { NET.acc = 0; netSnapshot(); }
-        }
-      }
+   And time is never thrown away. The previous version clamped the step to 50ms,
+   which meant a throttled tick reporting a full second of elapsed time advanced
+   the world by a twentieth of it -- the mission did not freeze, it ran at five
+   per cent speed and then snapped forward when you came back. */
+const STEP_MAX = 0.033;        /* longest single step: keeps collisions honest */
+const CATCHUP_MAX = 0.5;       /* more debt than this is simply written off */
+const RAF_STALL = 0.25;        /* silence from rAF before the other clocks help */
+
+let last = 0, lastRaf = 0, lastPaint = 0;
+let fpsAcc = 0, fpsN = 0, errShown = false, pumping = false;
+
+function simTick(dt) {
+  if (!S.running) return;
+  if (isClient()) updateClient(dt);
+  else {
+    if (!S.paused) update(dt);
+    if (isHost()) {
+      NET.acc += dt;
+      /* keep shipping snapshots while paused so the squad is told why the world
+         stopped moving */
+      if (NET.acc >= NET.rate) { NET.acc = 0; netSnapshot(); }
     }
-    if (paint) {
-      healthEase(dt);
-      draw(); hud(); gmHud(); drawMinimap();
-    }
-  } catch (err) {
-    if (!errShown) { console.error(err); errShown = true; }
-    HD.lastError = err;
   }
 }
 
-function frame(t) {
-  lastRaf = performance.now();
-  const dt = Math.min(0.05, (t - last) / 1000 || 0);
-  last = t;
-  step(dt, true);
-  /* ---- keep up, or draw less ---- */
-  fpsAcc += dt; fpsN++;
+function paintTick(t) {
+  const pdt = Math.min(0.1, (t - lastPaint) / 1000 || 0.016);
+  lastPaint = t;
+  healthEase(pdt);
+  draw(); hud(); gmHud(); drawMinimap();
+  fpsAcc += pdt; fpsN++;
   if (fpsAcc >= 0.75) {
     S.fps = fpsN / fpsAcc;
     fpsAcc = 0; fpsN = 0;
@@ -563,39 +561,69 @@ function frame(t) {
     } else S.quality = UI.quality === 'low' ? 0.35 : 1;
     S.particleCap = Math.round(400 + 1200 * S.quality);
   }
+}
+
+/* Advance the world by however much real time has passed since the last time
+   anything did, in steps small enough to simulate honestly. */
+function pump(paint) {
+  if (pumping) return;                 /* a wake arriving mid-pump can wait */
+  pumping = true;
+  const t = performance.now();
+  let left = (t - last) / 1000;
+  last = t;
+  if (!(left > 0)) left = 0;
+  if (left > CATCHUP_MAX) left = CATCHUP_MAX;
+  /* The sound budget is refilled once per pump, not once per sub-step -- a
+     catch-up of twelve steps must not be twelve times as loud. It lives here,
+     for every role: it used to live inside update(), which a joining Helldiver
+     never runs, so they had no sound effects at all and nothing said so. */
+  refillBudget(paint ? 16 : 5);
+  try {
+    let n = 0;
+    while (left > 0.0008 && n < 20) {
+      const dt = Math.min(STEP_MAX, left);
+      simTick(dt);
+      left -= dt; n++;
+    }
+    /* the procedural march schedules itself ahead on a main-thread timer, which
+       is throttled along with everything else; nudging it here keeps it from
+       tearing holes in itself while the window is in the background */
+    musicSchedule();
+    if (paint) paintTick(t);
+  } catch (err) {
+    if (!errShown) { console.error(err); errShown = true; }
+    HD.lastError = err;
+  }
+  pumping = false;
+}
+
+function frame() {
+  lastRaf = performance.now();
+  pump(true);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-/* ---- a clock that does not stop when the window does ------------------
-   Browsers stop calling requestAnimationFrame in a hidden tab and throttle
-   setInterval down to once a second. For a solo game that is a courtesy. For a
-   host it means alt-tabbing freezes the mission for the whole squad, and for a
-   client it means no input goes upstream until they come back.
-
-   The trigger is deliberately "has rAF actually run recently", not
-   `document.hidden`. A window that is merely covered by another one, or
-   minimised, keeps reporting itself as visible while the compositor quietly
-   stops painting it -- so gating on the flag misses exactly the case a host is
-   most likely to hit. A worker's timers are not throttled, so it watches the
-   clock and steps the simulation itself whenever rAF has gone quiet. Only the
-   drawing stops. */
-const RAF_STALL = 0.25;                    /* seconds of silence before we step in */
+/* ---- the clocks that take over when the window stops being painted ----
+   Gated on "has rAF actually run recently" rather than `document.hidden`: a
+   window merely covered by another one, or minimised, keeps reporting itself as
+   visible while the compositor quietly stops painting it, and that is exactly
+   the case a host is most likely to hit. */
+function wake() {
+  if (performance.now() - lastRaf < RAF_STALL * 1000) return;   /* rAF has it */
+  pump(false);
+}
+NETWAKE.fn = wake;                      /* every arriving message is a heartbeat */
 let ticker = null;
 try {
   const src = 'setInterval(function(){postMessage(0)},16)';
   ticker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
-  ticker.onmessage = () => {
-    const t = performance.now();
-    if (t - lastRaf < RAF_STALL * 1000) return;     /* rAF is doing its job */
-    const dt = Math.min(0.05, (t - last) / 1000 || 0);
-    last = t;
-    if (dt > 0.001) step(dt, false);
-  };
-} catch (e) { /* no workers: an unpainted window pauses, as it always did */ }
+  ticker.onmessage = wake;
+} catch (e) { /* no workers: the network heartbeat carries it alone */ }
 document.addEventListener('visibilitychange', () => {
-  /* do not charge the simulation for the time nobody was watching */
+  /* do not charge the simulation for time nobody was watching */
   last = performance.now();
+  lastPaint = last;
 });
 
 /* ============================ BUTTON WIRING ============================ */
