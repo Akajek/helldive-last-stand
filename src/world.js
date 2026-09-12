@@ -220,21 +220,34 @@ function buildCave(R) {
   if (!caveMouths.length) caveMouths.push({ x: 0, y: 0 });
   S.caveRooms = rooms.map(r => ({ x: r.x * CELL, y: r.y * CELL, r: r.r * CELL }));
 }
-/* somewhere in the cave with actual floor under it */
+/* Somewhere in the cave with actual floor under it, as close to the hint as the
+   rock allows. It used to pick a chamber at random and ignore the hint entirely,
+   which dropped the squad four thousand units from the entry cavern and left the
+   camera inside a wall on the way there. */
 export function openSpot(nearX, nearY, tries) {
-  const rooms = S.caveRooms || [];
-  for (let i = 0; i < (tries || 40); i++) {
-    let x, y;
-    if (rooms.length) {
-      const r = rooms[(Math.random() * rooms.length) | 0];
-      const a = rand(0, TAU), d = Math.random() * r.r * 0.75;
-      x = r.x + Math.cos(a) * d; y = r.y + Math.sin(a) * d;
-    } else {
-      x = rand(-S.world, S.world); y = rand(-S.world, S.world);
+  const hx = nearX || 0, hy = nearY || 0;
+  if (!solidAt(hx, hy)) return { x: hx, y: hy };
+  /* walk outwards from the hint before giving up and going room-hunting */
+  for (let ring = 1; ring <= 12; ring++) {
+    const r = ring * CELL * 1.5, n = 6 + ring * 3;
+    const off = Math.random() * TAU;
+    for (let i = 0; i < n; i++) {
+      const a = off + (i / n) * TAU;
+      const x = hx + Math.cos(a) * r, y = hy + Math.sin(a) * r;
+      if (Math.abs(x) < S.world && Math.abs(y) < S.world && !solidAt(x, y)) return { x, y };
     }
+  }
+  const rooms = (S.caveRooms || []).slice()
+    .sort((a, b) => Math.hypot(a.x - hx, a.y - hy) - Math.hypot(b.x - hx, b.y - hy));
+  for (let i = 0; i < (tries || 40); i++) {
+    if (!rooms.length) break;
+    /* prefer the nearest handful rather than the whole hive */
+    const r = rooms[Math.min(rooms.length - 1, (Math.random() * Math.min(5, rooms.length)) | 0)];
+    const a = rand(0, TAU), d = Math.random() * r.r * 0.75;
+    const x = r.x + Math.cos(a) * d, y = r.y + Math.sin(a) * d;
     if (!solidAt(x, y)) return { x, y };
   }
-  return { x: nearX || 0, y: nearY || 0 };
+  return { x: hx, y: hy };
 }
 
 /* ============================ DESTRUCTION ============================ */

@@ -16,7 +16,7 @@ import { evPlay, capeInit, capeUpdate } from './events.js';
 import { NET, netSend, netStatus, LOBBY, lobbyClose } from './net.js';
 import {
   STRATS, STRAT_BY_ID, TROOPS, TROOP_IDS, FACTIONS, SIZE, WEAPONS, SLOTW,
-  SENTRIES, PROJ, MAPS, OBJECTIVES
+  SENTRIES, PROJ, MAPS, OBJECTIVES, ANG8
 } from './data.js';
 import { buildMap, G, CELL, gIndex, killCell, restoreCell, resolveCircle, solidAt } from './world.js';
 import { makeDiver, W_, A_, refit } from './diver.js';
@@ -126,6 +126,7 @@ export function clientSnap(m) {
     S.mod.confuse = m.md[0]; S.mod.radar = m.md[1];
     S.mod.spore = m.md[2]; S.mod.barrage = m.md[3];
     S.mod.noSpawn = m.md[6] ? { x: m.md[4], y: m.md[5], r: m.md[6] } : null;
+    S.mod.uplink = m.md[7] || 0;
   }
   S.wreck = m.wr ? { x: m.wr[0], y: m.wr[1], a: m.wr[2] / 100, t: S.time } : S.wreck;
 
@@ -184,25 +185,25 @@ export function clientSnap(m) {
   /* ---- the horde ---- */
   if (m.e) {
     const seen = {};
-    for (let i = 0; i < m.e.length; i += 8) {
+    for (let i = 0; i < m.e.length; i += 7) {
       const id = m.e[i];
       seen[id] = 1;
       let e = M.en[id];
       if (!e) {
         e = clientEnemy(id, m.e[i + 1]);
         lerpAt(e, m.e[i + 2], m.e[i + 3]);
-        e.face = m.e[i + 4] / 57.2958; e.aim = e.face;
+        e.face = m.e[i + 4] / ANG8; e.aim = e.face;
         M.en[id] = e; S.enemies.push(e);
       }
       lerpTo(e, m.e[i + 2], m.e[i + 3]);
-      e.face = m.e[i + 4] / 57.2958;
+      e.face = m.e[i + 4] / ANG8;
       e.cdir = e.face;
       e.max = 100; e.hp = m.e[i + 5];
-      const fl = m.e[i + 6];
+      const w = m.e[i + 6], fl = w & 255;
       e.hit = (fl & 1) ? 0.1 : 0; e.wind = (fl & 2) ? 0.4 : 0; e.cw = (fl & 4) ? 0.4 : 0;
       e.chg = (fl & 8) ? 0.4 : 0; e.rec = (fl & 16) ? 0.4 : 0; e.burn = (fl & 32) ? 0.5 : 0;
       e.beamT = (fl & 64) ? 0.3 : 0; e.beamWind = (fl & 128) ? 0.3 : 0;
-      e.zT = m.e[i + 7];
+      e.zT = ((w >> 8) & 63) * 2;
       e.seenAt = S.time;
     }
     /* Only drop what the host could have mentioned. A body that fell out of MY
@@ -213,7 +214,7 @@ export function clientSnap(m) {
       if (seen[e.id]) continue;
       const d = earDist(e.x, e.y);
       const inRange = d < (e.size === 'large' ? 2900 : e.size === 'medium' ? 1800 : 1400);
-      const stale = S.time - (e.seenAt || 0) > 1.2;
+      const stale = S.time - (e.seenAt || 0) > 1.4;
       if (inRange && !stale && e.size === 'small' && d > 900) continue;  /* far tier */
       if (inRange || stale) { delete M.en[e.id]; S.enemies.splice(j, 1); }
     }

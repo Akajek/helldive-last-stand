@@ -94,8 +94,10 @@ function drawCells() {
   const cave = S.map.cave;
   for (const [bid, list] of groups) {
     const b = bid >= 0 ? buildings[bid] : null;
-    const roof = b ? b.roof : '#2a2318';
-    const side = b ? b.side : '#171208';
+    /* rock, lit only by whatever torch is pointing at it, has to sit clearly
+       above the cave floor or the whole map reads as one black rectangle */
+    const roof = b ? b.roof : '#584534';
+    const side = b ? b.side : '#2a1d12';
     const ox = b ? b.tall * 0.5 : 5, oy = b ? b.tall * 0.6 : 6;
     const shiver = (b && b.collapse) ? rand(-2.5, 2.5) : 0;
 
@@ -935,7 +937,7 @@ function drawDarkness(sx, sy) {
   const L = lctx;
   L.setTransform(1, 0, 0, 1, 0, 0);
   L.globalCompositeOperation = 'source-over';
-  L.fillStyle = 'rgba(4,4,6,0.94)';
+  L.fillStyle = 'rgba(4,4,6,0.90)';
   L.fillRect(0, 0, S.W, S.H);
   L.globalCompositeOperation = 'destination-out';
   const ox = S.W / 2 - S.cam.x + sx + S.camKick.x;
@@ -950,7 +952,7 @@ function drawDarkness(sx, sy) {
   };
   for (const P of S.players) {
     if (P.inPod || P.dead) continue;
-    hole(P.x, P.y, P === S.me ? 460 : 330);
+    hole(P.x, P.y, P === S.me ? 540 : 380);
     /* the torch points where you are looking */
     const a = P.ang;
     for (let i = 1; i <= 5; i++)

@@ -26,7 +26,7 @@ export function resetObjectives() {
   S.objectives.length = 0;
   OBJ.nextAt = 55; OBJ.done = 0; OBJ.failed = 0;
   S.mod.confuse = 0; S.mod.radar = 0; S.mod.noSpawn = null;
-  S.mod.spore = 0; S.mod.barrage = 0;
+  S.mod.spore = 0; S.mod.barrage = 0; S.mod.uplink = 0;
 }
 
 /* ============================ SPAWNING ONE ============================ */
@@ -38,6 +38,10 @@ export function updateObjectives(dt) {
     if (S.mod.radar <= 0) S.mod.noSpawn = null;
   }
   if (S.mod.spore > 0) S.mod.spore -= dt;
+  if (S.mod.uplink > 0) {
+    S.mod.uplink -= dt;
+    if (S.mod.uplink <= 0 && S.map.cave) say('UPLINK LOST — THE ROCK IS BACK', 3);
+  }
 
   for (const o of S.objectives) {
     o.t += dt;
@@ -191,7 +195,14 @@ export function applyReward(kind, o) {
         for (let i = 0; i < P.stt.length; i++) if (!STRATS[i].hidden) P.stt[i] = 0;
       break;
     case 'unjam':
-      /* the field died with the structure; nothing more to do but say so */
+      /* Above ground the field died with the structure and that is the whole
+         reward. Underground there is no sky at all, so breaking one punches a
+         temporary hole in the interference -- two minutes to spend everything
+         you have been saving. */
+      if (S.map.cave) {
+        S.mod.uplink = 120;
+        say('UPLINK OPEN — 120 SECONDS', 4);
+      }
       break;
     case 'vision':
       S.mod.spore = 0;

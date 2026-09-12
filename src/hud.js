@@ -60,6 +60,8 @@ export function hud() {
     bits.push('REBUILD ' + Math.max(0, Math.ceil(S.nextRebuild - S.time)) + 's');
   if (S.mod.confuse > 0) bits.push('COMMS DOWN ' + Math.ceil(S.mod.confuse) + 's');
   if (S.mod.radar > 0) bits.push('RADAR ' + Math.ceil(S.mod.radar) + 's');
+  if (S.map.cave) bits.push(S.mod.uplink > 0
+    ? 'UPLINK OPEN ' + Math.ceil(S.mod.uplink) + 's' : 'NO UPLINK');
   if (amGM()) bits.push('GAME MASTER');
   if (isClient()) bits.push(S.ping + 'ms');
   if (A.muted) bits.push('[MUTED]');
@@ -135,8 +137,8 @@ export function hud() {
     const left = me ? me.stt[si] : 0;
     const ready = left <= 0;
     const isArmed = !!(me && me.armed === t);
-    const blocked = (jam && t.kind !== 'reinforce') ||
-                    (S.map.cave && (t.pod || t.orbital) && t.kind !== 'reinforce');
+    const blocked = t.kind !== 'reinforce' &&
+                    (!!jam || (S.map.cave && S.mod.uplink <= 0));
     let used = '';
     if (t.uses !== undefined && me) {
       const u = (me.uses && me.uses[t.id]) || 0;

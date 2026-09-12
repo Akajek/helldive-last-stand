@@ -58,15 +58,14 @@ export function reset() {
   S.gameOver = false; S.wipeT = 0; S.wave = 0; S.waveT = 0;
   S.enemyId = 0; S.netId = 0;
   S.nextRebuild = REBUILD_EVERY; S.rebuildQ = null;
-  S.mod = { confuse: 0, radar: 0, noSpawn: null, spore: 0, jam: [], barrage: 0 };
+  S.mod = { confuse: 0, radar: 0, noSpawn: null, spore: 0, jam: [], barrage: 0, uplink: 0 };
   netCK.length = 0; netCA.length = 0;
   clearOut();
   resetDirector();
   resetObjectives();
-  S.cam.x = S.players[0].x; S.cam.y = S.players[0].y;
   for (const P of S.players) capeInit(P);
 
-  if (!sim()) return;               /* a client waits to be told where everything is */
+  if (!sim()) { snapCamera(); return; }   /* a client waits to be told where everything is */
 
   if (!S.gmMatch) seedOpening();
   /* every dive starts the only way it can: strapped into a hellpod -- and a squad
@@ -88,6 +87,16 @@ export function reset() {
       dropPod(Math.cos(a) * ring, Math.sin(a) * ring, { kind: 'player', pid: S.players[i].id });
     }
   }
+  /* the camera is placed AFTER the squad is, or it spends the first two seconds
+     easing across the map from wherever the roster happened to be built */
+  snapCamera();
+}
+/* put the eye exactly where it belongs, with no travel */
+export function snapCamera() {
+  const eye = S.me || S.players[0];
+  if (!eye) return;
+  S.cam.x = eye.x; S.cam.y = eye.y;
+  S.camKick.x = 0; S.camKick.y = 0;
 }
 
 /* ============================ THE WIPE ============================

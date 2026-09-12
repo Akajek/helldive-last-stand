@@ -16,7 +16,7 @@ import {
 } from './state.js';
 import { OUT, drain } from './outbox.js';
 import { NET, netSend, LOBBY } from './net.js';
-import { STRATS, STRAT_BY_ID, TROOP_IDS, SIZE, WEAPONS } from './data.js';
+import { STRATS, STRAT_BY_ID, TROOP_IDS, SIZE, WEAPONS, ANG8 } from './data.js';
 import { netCK, netCA, mapSeed } from './world.js';
 import {
   reload, tryPickup, throwNade, meleeSwing, useStim, equipSlot, W_, A_
@@ -26,10 +26,17 @@ import { GM } from './gm.js';
 
 const R = Math.round;
 
-/* how far a body of each size is worth sending at all */
-const CULL = { small: 1500, medium: 1900, large: 3000 };
-/* ...and how often, once it is past this */
-const NEAR = 1000;
+/* How far a body of each size is worth sending at all, how close it has to be
+   to be refreshed every single snapshot, and the hard ceiling on how many go in
+   one message.
+   The ceiling is the important one. Without it a really bad moment -- five
+   hundred bodies converging on one Helldiver -- sends a hundred and sixty
+   kilobytes a second down a link that may not have it, and the result is the
+   rubber-banding rather than the frame rate. Past about two hundred bodies the
+   ones you cannot see are not worth the bandwidth. */
+const CULL = { small: 1300, medium: 1700, large: 2800 };
+const NEAR = 1100;
+const MAXSEND = 210;
 
 export function netSendCity() {
   netSend({
@@ -134,7 +141,6 @@ function sentryIdx(t) { const i = SENIDX.indexOf(t); return i < 0 ? 0 : i; }
 export function netSnapshot() {
   if (!isHost()) return;
   NET.tick++;
-  const farTick = (NET.tick % 3) === 0;
 
   /* the channels are global: drain once, then include in everybody's copy */
   const shared = {};
@@ -150,7 +156,7 @@ export function netSnapshot() {
     ki: S.kills, rb: R(S.nextRebuild), rf: S.livesLeft, ps,
     md: [R(S.mod.confuse), R(S.mod.radar), R(S.mod.spore), S.mod.barrage,
          S.mod.noSpawn ? R(S.mod.noSpawn.x) : 0, S.mod.noSpawn ? R(S.mod.noSpawn.y) : 0,
-         S.mod.noSpawn ? R(S.mod.noSpawn.r) : 0],
+         S.mod.noSpawn ? R(S.mod.noSpawn.r) : 0, R(S.mod.uplink)],
     gm: { c: R(GM.credits), s: GM.score },
     wr: S.wreck ? [R(S.wreck.x), R(S.wreck.y), R(S.wreck.a * 100)] : 0
   };
@@ -164,24 +170,47 @@ export function netSnapshot() {
   for (const peer of targets) {
     const P = diverById(peer.id);
     const ax = P ? P.x : S.cam.x, ay = P ? P.y : S.cam.y;
-    base.e = cullEnemies(ax, ay, farTick);
+    base.e = cullEnemies(ax, ay, NET.tick);
     base.to = peer.id;
     netSend(base);
   }
 }
 
-function cullEnemies(ax, ay, farTick) {
-  const e = [];
+function cullEnemies(ax, ay, tick) {
+  const cand = [];
   for (const en of S.enemies) {
-    const d = Math.hypot(en.x - ax, en.y - ay);
+    const dx = en.x - ax, dy = en.y - ay;
+    const d = Math.sqrt(dx * dx + dy * dy);
     if (d > CULL[en.size]) continue;
-    /* anything past arm's reach only needs updating every third word */
-    if (d > NEAR && !farTick && en.size === 'small') continue;
+    /* Past arm's reach the small and medium classes refresh every third word,
+       staggered by id so a third of them move each time rather than all of them
+       stuttering together. Anything large is always current -- a Bile Titan
+       teleporting twenty units is a great deal more noticeable. */
+    if (d > NEAR && en.size !== 'large' && (tick % 3) !== (en.id % 3)) continue;
+    cand.push(d, en);
+  }
+  /* over the ceiling: keep the nearest, drop the rest of this word */
+  let list = cand;
+  if (cand.length / 2 > MAXSEND) {
+    const pairs = [];
+    for (let i = 0; i < cand.length; i += 2) pairs.push([cand[i], cand[i + 1]]);
+    pairs.sort((a, b) => a[0] - b[0]);
+    pairs.length = MAXSEND;
+    list = [];
+    for (const p of pairs) list.push(p[0], p[1]);
+  }
+  const e = [];
+  for (let i = 1; i < list.length; i += 2) {
+    const en = list[i];
+    /* height rides in the high bits of the flag word rather than costing a
+       field of its own, since it is zero for everything that walks */
+    const z = Math.min(63, Math.round((en.z || 0) / 2));
     const fl = (en.hit > 0 ? 1 : 0) | (en.wind > 0 ? 2 : 0) | (en.cw > 0 ? 4 : 0) |
                (en.chg > 0 ? 8 : 0) | (en.rec > 0 ? 16 : 0) | (en.burn > 0 ? 32 : 0) |
-               (en.beamT > 0 ? 64 : 0) | (en.beamWind > 0 ? 128 : 0);
+               (en.beamT > 0 ? 64 : 0) | (en.beamWind > 0 ? 128 : 0) | (z << 8);
     e.push(en.id, TROOP_IDS.indexOf(en.tid), R(en.x), R(en.y),
-           R(en.face * 57.2958), R(100 * en.hp / en.max), fl, R(en.z || 0));
+           R((((en.face % TAU) + TAU) % TAU) * ANG8) & 255,
+           R(100 * en.hp / en.max), fl);
   }
   return e;
 }

@@ -34,6 +34,10 @@ export const FACTIONS = {
 };
 export const FACTION_IDS = ['terminid', 'automaton', 'illuminate'];
 
+/* Angles go over the wire as a single byte. A tenth of a degree of facing is not
+   worth four characters twelve times a second for every body on the map. */
+export const ANG8 = 256 / (Math.PI * 2);
+
 /* size class -> how far it can be heard, and how heavy it feels */
 export const SIZE = {
   small: { i: 0, hear: 620, shake: 0, mass: 1, foot: 0 },
@@ -362,7 +366,7 @@ export const MAPS = {
   },
   cave: {
     id: 'cave', name: 'THE HIVE', world: 4200,
-    ground: '#0a0907', grid: '#14110c', border: '#3a2c1c',
+    ground: '#100c08', grid: '#1b150e', border: '#5a4428',
     city: true, cave: true, dark: true, rockHp: 420,
     blurb: 'Underground. No sky, so nothing can be called down until you break the jammers.'
   }

@@ -365,6 +365,22 @@ section('10. Underground, and under a jammer');
   ok('cave: an orbital call is refused', S.balls.length === ballsBefore);
   const rein = STRAT_BY_ID.reinforce;
   ok('cave: reinforcement is still allowed', !jammedCheck(rein));
+  ok('cave: an Eagle cannot fly through rock either',
+     !!jammedCheck(STRAT_BY_ID.eagle500));
+  /* breaking a jammer down here buys a window rather than nothing */
+  S.objectives.length = 0;
+  S.objectives.push({ nid: 7, id: 'jammer', D: OBJECTIVES.jammer, kind: 'destroy',
+    name: 'J', x: P.x + 300, y: P.y, hp: 0, max: 2400, field: 1300, radius: 26,
+    col: '#f00', t: 0, prog: 0, have: 0, need: 0, armor: 2, done: false, timeout: 999 });
+  run(0.5);
+  ok('cave: a dead jammer opens the uplink', S.mod.uplink > 60, String(S.mod.uplink));
+  ok('cave: and the call goes through', !jammedCheck(orb));
+  P.armed = orb; P.stt.fill(0);
+  const bc = S.balls.length;
+  throwStratagem(P, P.x + 200, P.y);
+  ok('cave: the beacon actually leaves your hand', S.balls.length > bc);
+  S.mod.uplink = 0;
+  ok('cave: and the rock comes back when it expires', !!jammedCheck(orb));
 
   /* a jammer above ground blocks everything in its field */
   newMission('plains');

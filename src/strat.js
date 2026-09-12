@@ -32,7 +32,10 @@ export function jammedAt(x, y, s) {
   if (s.kind === 'reinforce') return false;        /* they walk in; see reinforceAt */
   for (const o of S.objectives)
     if (o.field && o.hp > 0 && Math.hypot(o.x - x, o.y - y) < o.field) return 'JAMMED';
-  if (S.map.cave && (s.pod || s.orbital)) return 'NO SKY — BREAK THE JAMMERS';
+  /* Underground NOTHING gets through -- not a pod, not an orbital shell, and not
+     an Eagle, which would have to fly through several hundred metres of rock.
+     Breaking a jammer punches a hole in the interference and buys a window. */
+  if (S.map.cave && S.mod.uplink <= 0) return 'NO SKY — BREAK A JAMMER';
   return false;
 }
 

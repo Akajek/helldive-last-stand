@@ -32,7 +32,7 @@ export const S = {
   wreck: null, shipTarget: null, shipFx: null, flashWhite: 0,
   nextRebuild: 75, rebuildQ: null, caveRooms: null, ping: 0,
   /* ---- world modifiers set by objectives ---- */
-  mod: { confuse: 0, radar: 0, noSpawn: null, spore: 0, jam: [], barrage: 0 },
+  mod: { confuse: 0, radar: 0, noSpawn: null, spore: 0, jam: [], barrage: 0, uplink: 0 },
   /* ---- toast line ---- */
   toast: { t: 0, max: 3, txt: '' },
   /* ---- ids ---- */
